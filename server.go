@@ -238,10 +238,10 @@ func (m *Manager) run() error {
 }
 
 var (
-	reDone   = regexp.MustCompile(`\]: Done \(`)
-	reJoin   = regexp.MustCompile(`\]: ([A-Za-z0-9_.]{2,16}) joined the game`)
-	reLeave  = regexp.MustCompile(`\]: ([A-Za-z0-9_.]{2,16}) left the game`)
-	rePort   = regexp.MustCompile(`(?i)FAILED TO BIND TO PORT|Address already in use`)
+	reDone  = regexp.MustCompile(`\]: Done \(`)
+	reJoin  = regexp.MustCompile(`\]: ([A-Za-z0-9_.]{2,16}) joined the game`)
+	reLeave = regexp.MustCompile(`\]: ([A-Za-z0-9_.]{2,16}) left the game`)
+	rePort  = regexp.MustCompile(`(?i)FAILED TO BIND TO PORT|Address already in use`)
 )
 
 func (m *Manager) readOutput(r io.Reader) {
@@ -374,13 +374,17 @@ func (m *Manager) setupNetwork(port int, upnp bool, java string) {
 		m.log("[EasyHost] " + msg)
 	}
 
+	// Don't touch the router for a server that already crashed.
+	if st := m.Status().State; st == StateError || st == StateStopped {
+		return
+	}
 	info.PublicIP = publicIP()
 	if upnp {
 		m.update(func(s *Status) { s.Net = info; s.Net.UPnP = "trying" })
 		pm, ext, err := addPortMapping(port, info.LanIP)
 		if err != nil {
 			info.UPnP = "failed"
-			m.log("[EasyHost] Could not open the port on your router automatically (" + err.Error() + "). Friends on your Wi-Fi can still join; for friends elsewhere see Help.")
+			m.log("[EasyHost] Could not open the port on your router automatically: " + err.Error() + ". Friends on your Wi-Fi can still join; for friends elsewhere see Help.")
 		} else {
 			info.UPnP = "ok"
 			info.RouterIP = ext
@@ -536,20 +540,24 @@ func autoMemoryMB() int {
 	return mem / 256 * 256
 }
 
-// aikarFlags are the widely used G1 tuning flags recommended by PaperMC.
+// aikarFlags are the widely used G1 tuning flags recommended by PaperMC,
+// minus G1RSetUpdatingPauseIntervalMillis, which Java 25 no longer accepts.
+// IgnoreUnrecognizedVMOptions keeps a future Java that drops another one
+// from refusing to start.
 func aikarFlags(mem int) []string {
 	newSize, maxNew, region, reserve, ihop := "30", "40", "8M", "20", "15"
 	if mem >= 12*1024 {
 		newSize, maxNew, region, reserve, ihop = "40", "50", "16M", "15", "20"
 	}
 	return []string{
+		"-XX:+IgnoreUnrecognizedVMOptions",
 		"-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", "-XX:MaxGCPauseMillis=200",
 		"-XX:+UnlockExperimentalVMOptions", "-XX:+DisableExplicitGC", "-XX:+AlwaysPreTouch",
 		"-XX:G1NewSizePercent=" + newSize, "-XX:G1MaxNewSizePercent=" + maxNew,
 		"-XX:G1HeapRegionSize=" + region, "-XX:G1ReservePercent=" + reserve,
 		"-XX:G1HeapWastePercent=5", "-XX:G1MixedGCCountTarget=4",
 		"-XX:InitiatingHeapOccupancyPercent=" + ihop, "-XX:G1MixedGCLiveThresholdPercent=90",
-		"-XX:G1RSetUpdatingPauseIntervalMillis=100", "-XX:SurvivorRatio=32",
+		"-XX:SurvivorRatio=32",
 		"-XX:+PerfDisableSharedMem", "-XX:MaxTenuringThreshold=1",
 		"-Dusing.aikars.flags=https://mcflags.emc.gs", "-Daikars.new.flags=true",
 	}

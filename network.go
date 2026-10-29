@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/huin/goupnp/dcps/internetgateway2"
+	"github.com/huin/goupnp/soap"
 )
 
 type NetInfo struct {
@@ -106,5 +109,31 @@ func addPortMapping(port int, localIP string) (*portMapping, string, error) {
 		ext, _ := c.GetExternalIPAddress()
 		return &portMapping{client: c, port: uint16(port)}, ext, nil
 	}
-	return nil, "", lastErr
+	return nil, "", explainUPnPError(lastErr, port)
+}
+
+// explainUPnPError turns the router's SOAP fault into something a person
+// can act on instead of a dump of XML.
+func explainUPnPError(err error, port int) error {
+	var fault *soap.SOAPFaultError
+	if !errors.As(err, &fault) {
+		return err
+	}
+	switch code := fault.Detail.UPnPError.Errorcode; code {
+	case 606:
+		return errors.New("your router found UPnP but does not allow programs to open ports. " +
+			"Allow it in the router settings (on a FRITZ!Box: Internet → Permit Access → edit this PC → " +
+			"\"Permit independent port sharing\"), or forward TCP port " + strconv.Itoa(port) + " to this PC by hand")
+	case 718:
+		return errors.New("the router already forwards port " + strconv.Itoa(port) +
+			" to another device. Remove that forwarding in the router, or pick another port in Settings")
+	case 0:
+		return errors.New("the router rejected the request (" + strings.TrimSpace(fault.FaultString) + ")")
+	default:
+		desc := strings.TrimSpace(fault.Detail.UPnPError.ErrorDescription)
+		if desc == "" {
+			desc = "no description"
+		}
+		return fmt.Errorf("the router rejected the request (UPnP error %d: %s)", code, desc)
+	}
 }

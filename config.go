@@ -10,19 +10,19 @@ import (
 // Config is everything the user can change. Defaults are chosen so that
 // pressing "Start" without touching anything gives a working server.
 type Config struct {
-	ServerType  string `json:"serverType"`  // "paper" or "vanilla"
-	Version     string `json:"version"`     // "latest" or a concrete version id
-	MemoryMB    int    `json:"memoryMB"`    // 0 = automatic
-	Port        int    `json:"port"`        // default 25565
-	MaxPlayers  int    `json:"maxPlayers"`  // default 10
-	Gamemode    string `json:"gamemode"`    // survival, creative, adventure, spectator
-	Difficulty  string `json:"difficulty"`  // peaceful, easy, normal, hard
-	MOTD        string `json:"motd"`        // server list message
-	OnlineMode  bool   `json:"onlineMode"`  // verify accounts with Mojang
-	PVP         bool   `json:"pvp"`         // players can hurt each other
-	Whitelist   bool   `json:"whitelist"`   // only whitelisted players can join
-	UPnP        bool   `json:"upnp"`        // try to open the port on the router
-	EulaAccepted bool  `json:"eulaAccepted"` // set only by the user ticking the box
+	ServerType   string `json:"serverType"`   // "paper" or "vanilla"
+	Version      string `json:"version"`      // "latest" or a concrete version id
+	MemoryMB     int    `json:"memoryMB"`     // 0 = automatic
+	Port         int    `json:"port"`         // default 25565
+	MaxPlayers   int    `json:"maxPlayers"`   // default 10
+	Gamemode     string `json:"gamemode"`     // survival, creative, adventure, spectator
+	Difficulty   string `json:"difficulty"`   // peaceful, easy, normal, hard
+	MOTD         string `json:"motd"`         // server list message
+	OnlineMode   bool   `json:"onlineMode"`   // verify accounts with Mojang
+	PVP          bool   `json:"pvp"`          // players can hurt each other
+	Whitelist    bool   `json:"whitelist"`    // only whitelisted players can join
+	UPnP         bool   `json:"upnp"`         // try to open the port on the router
+	EulaAccepted bool   `json:"eulaAccepted"` // set only by the user ticking the box
 }
 
 func defaultConfig() Config {

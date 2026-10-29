@@ -11,15 +11,15 @@ import (
 // every other line (including ones the user edited by hand).
 func writeServerProperties(path string, c Config) error {
 	managed := map[string]string{
-		"server-port":    strconv.Itoa(c.Port),
-		"query.port":     strconv.Itoa(c.Port),
-		"max-players":    strconv.Itoa(c.MaxPlayers),
-		"gamemode":       c.Gamemode,
-		"difficulty":     c.Difficulty,
-		"motd":           escapeProp(c.MOTD),
-		"online-mode":    strconv.FormatBool(c.OnlineMode),
-		"pvp":            strconv.FormatBool(c.PVP),
-		"white-list":     strconv.FormatBool(c.Whitelist),
+		"server-port":       strconv.Itoa(c.Port),
+		"query.port":        strconv.Itoa(c.Port),
+		"max-players":       strconv.Itoa(c.MaxPlayers),
+		"gamemode":          c.Gamemode,
+		"difficulty":        c.Difficulty,
+		"motd":              escapeProp(c.MOTD),
+		"online-mode":       strconv.FormatBool(c.OnlineMode),
+		"pvp":               strconv.FormatBool(c.PVP),
+		"white-list":        strconv.FormatBool(c.Whitelist),
 		"enforce-whitelist": strconv.FormatBool(c.Whitelist),
 	}
 

@@ -92,10 +92,10 @@ func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan str
 			"status": mgr.Status(),
 			"config": cfg.Get(),
 			"info": map[string]any{
-				"dataDir":    dataDir,
-				"totalMB":    totalMemoryMB(),
-				"autoMB":     autoMemoryMB(),
-				"hasWorld":   worldExists(mgr.serverDir),
+				"dataDir":  dataDir,
+				"totalMB":  totalMemoryMB(),
+				"autoMB":   autoMemoryMB(),
+				"hasWorld": worldExists(mgr.serverDir),
 			},
 		})
 	})

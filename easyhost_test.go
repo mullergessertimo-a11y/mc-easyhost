@@ -104,6 +104,13 @@ func TestOnlineResolveAndJava(t *testing.T) {
 	}
 	t.Logf("java ok: %s", strings.SplitN(string(out), "\n", 2)[0])
 
+	// The exact JVM command line the server starts with must be accepted.
+	args := append([]string{"-Xms1024M", "-Xmx1024M"}, aikarFlags(1024)...)
+	out, err = exec.Command(java, append(args, "-version")...).CombinedOutput()
+	if err != nil || strings.Contains(string(out), "Unrecognized") || strings.Contains(string(out), "Ignoring option") {
+		t.Fatalf("Java %d rejects the server flags: %v\n%s", b.JavaMajor, err, out)
+	}
+
 	jar := filepath.Join(dir, "server", b.JarName)
 	if err := downloadFile(b.URL, jar, b.HashAlgo, b.Hash, nil); err != nil {
 		t.Fatal(err)
