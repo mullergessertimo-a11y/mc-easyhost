@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -48,6 +49,13 @@ func TestServerPropertiesKeepsUnmanagedKeys(t *testing.T) {
 	}
 	if strings.Count(s, "max-players=") != 1 {
 		t.Errorf("duplicate key:\n%s", s)
+	}
+}
+
+func TestDefaultDataDir(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/xdg")
+	if runtime.GOOS == "linux" && defaultDataDir() != "/xdg/mc-easyhost" {
+		t.Errorf("defaultDataDir()=%q", defaultDataDir())
 	}
 }
 

@@ -14,6 +14,7 @@ type Hub struct {
 	backlog   []string
 	lastSeen  time.Time // last moment at least one window was connected
 	hadClient bool
+	echo      func(string) // optional copy of console lines, e.g. to stdout
 }
 
 const backlogSize = 2000
@@ -48,6 +49,9 @@ func (h *Hub) SendLog(line string) {
 		h.backlog = h.backlog[len(h.backlog)-backlogSize:]
 	}
 	h.broadcast(event("log", line))
+	if h.echo != nil {
+		h.echo(line)
+	}
 }
 
 func (h *Hub) Subscribe() (chan []byte, []string) {

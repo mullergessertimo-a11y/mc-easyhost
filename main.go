@@ -4,7 +4,9 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -12,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -23,24 +26,40 @@ var webFS embed.FS
 // A fixed port lets a second launch find the running instance.
 const uiPort = 47615
 
+// version is set at build time with -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 func main() {
-	base, err := os.UserConfigDir()
-	if err != nil {
-		base = "."
+	headless := flag.Bool("headless", false, "don't open a window and keep running until stopped (for servers without a desktop)")
+	showVersion := flag.Bool("version", false, "print the version and exit")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println("MC EasyHost", version)
+		return
 	}
-	dataDir := filepath.Join(base, "MC EasyHost")
+
+	dataDir := defaultDataDir()
 	if d := os.Getenv("EASYHOST_DATA"); d != "" {
 		dataDir = d
 	}
 	os.MkdirAll(dataDir, 0o755)
+	var logOut io.Writer = io.Discard
 	if lf, err := os.OpenFile(filepath.Join(dataDir, "easyhost.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); err == nil {
-		log.SetOutput(lf)
+		logOut = lf
 	}
+	if *headless {
+		logOut = io.MultiWriter(os.Stdout, logOut)
+	}
+	log.SetOutput(logOut)
 
 	addr := fmt.Sprintf("127.0.0.1:%d", uiPort)
 	url := "http://" + addr + "/"
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		if *headless {
+			fmt.Fprintln(os.Stderr, "MC EasyHost is already running (port", uiPort, "is in use)")
+			os.Exit(1)
+		}
 		// Already running: just bring up another window to it.
 		openAppWindow(url, filepath.Join(dataDir, "ui-profile"))
 		return
@@ -49,6 +68,9 @@ func main() {
 	initPlatform()
 	cfg := loadConfig(dataDir)
 	hub := NewHub()
+	if *headless {
+		hub.echo = func(line string) { fmt.Println(line) }
+	}
 	mgr := NewManager(dataDir, cfg, hub)
 	quit := make(chan struct{}, 1)
 
@@ -56,7 +78,10 @@ func main() {
 	go srv.Serve(ln)
 	log.Println("UI on", url, "data in", dataDir)
 
-	if os.Getenv("EASYHOST_NO_WINDOW") == "" {
+	if *headless {
+		fmt.Printf("MC EasyHost %s running. Control panel: %s\n", version, url)
+		fmt.Printf("From another computer: ssh -L %d:127.0.0.1:%d <this-host>, then open %s\n", uiPort, uiPort, url)
+	} else if os.Getenv("EASYHOST_NO_WINDOW") == "" {
 		openAppWindow(url, filepath.Join(dataDir, "ui-profile"))
 	}
 
@@ -72,6 +97,9 @@ func main() {
 		case <-quit:
 			running = false
 		case <-tick.C:
+			if *headless {
+				continue // runs until SIGTERM / Ctrl+C / Quit
+			}
 			idle := hub.IdleFor()
 			if (hub.HadClient() && idle > 20*time.Second) || (!hub.HadClient() && idle > 3*time.Minute) {
 				running = false
@@ -96,6 +124,8 @@ func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan str
 				"totalMB":  totalMemoryMB(),
 				"autoMB":   autoMemoryMB(),
 				"hasWorld": worldExists(mgr.serverDir),
+				"os":       runtime.GOOS,
+				"version":  version,
 			},
 		})
 	})

@@ -142,7 +142,7 @@ input[type=range] { accent-color: var(--green); width: 100%; }
 <div class="app">
   <header>
     <svg class="logo" viewBox="0 0 16 16"><rect width="16" height="16" fill="#5b8c32"/><rect y="10" width="16" height="6" fill="#866043"/><rect x="0" y="9" width="2" height="2" fill="#5b8c32"/><rect x="7" y="9" width="3" height="2" fill="#5b8c32"/><rect x="3" y="5" width="3" height="3" fill="#4a7a28"/><rect x="10" y="3" width="3" height="3" fill="#6fa83d"/><rect x="2" y="12" width="2" height="2" fill="#6b4a32"/><rect x="11" y="13" width="2" height="2" fill="#6b4a32"/></svg>
-    <h1>MC EasyHost</h1>
+    <h1>MC EasyHost <small id="ver" style="color:var(--dim);font-weight:400;font-size:12px"></small></h1>
     <div class="sp"></div>
     <div class="pill" id="pill"><i></i><span id="pillText">Stopped</span></div>
   </header>
@@ -270,7 +270,7 @@ input[type=range] { accent-color: var(--green); width: 100%; }
         <ul>
           <li>Turn on <b>UPnP</b> in your router's settings, or set up a port forward for TCP port <code id="helpPort">25565</code> to <code id="helpIP">this PC</code>.</li>
           <li>If EasyHost says your provider uses <b>CGNAT</b>, port forwarding cannot work. A free tunnel such as <b>playit.gg</b> gives you an address that works anyway.</li>
-          <li>The first start asks for permission to add a Windows Firewall rule. Say yes, or friends can't connect.</li>
+          <li id="fwHelp">The first start asks for permission to add a Windows Firewall rule. Say yes, or friends can't connect.</li>
         </ul>
         <h4>Making yourself admin</h4>
         <p>Go to <b>Players</b>, type your name and press <b>Make admin</b>. Then you can use commands like <code>/gamemode creative</code> in game.</p>
@@ -535,6 +535,9 @@ form.addEventListener('submit', async e => {
 (async () => {
   const s = await call('state');
   status = s.status; config = s.config; info = s.info;
+  $('#ver').textContent = info.version && info.version !== 'dev' ? info.version : '';
+  if (info.os === 'linux') $('#fwHelp').textContent = "If the ufw or firewalld firewall is switched on, the first start asks for your password to open the port. Most desktop Linux systems have no firewall active, so usually nothing is asked.";
+  else if (info.os === 'darwin') $('#fwHelp').textContent = "If macOS asks whether Java may accept incoming connections, click Allow.";
   $('#memRange').max = Math.max(4096, Math.floor(info.totalMB * 0.8 / 512) * 512);
   fillForm(); render(); connect();
   loadVersions(config.serverType);

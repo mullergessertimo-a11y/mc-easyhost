@@ -14,19 +14,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe needs the tags for the version string
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go vet ./... && GOOS=windows go vet ./...
+      - run: go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...
       - run: go test ./...
-      - name: Build Windows exe
-        run: GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o build/MC-EasyHost.exe .
+      - name: Build Windows and Linux packages
+        run: ./scripts/package.sh
+      - name: Check the Linux installer
+        run: |
+          tar -C /tmp -xzf dist/mc-easyhost-linux-x86_64.tar.gz
+          HOME=/tmp/home /tmp/mc-easyhost-linux-x86_64/install.sh
+          /tmp/home/.local/bin/mc-easyhost --version
+          desktop-file-validate /tmp/home/.local/share/applications/mc-easyhost.desktop || true
       - uses: actions/upload-artifact@v4
         with:
           name: MC-EasyHost
-          path: build/MC-EasyHost.exe
+          path: dist/*
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/MC-EasyHost.exe
+          files: dist/*

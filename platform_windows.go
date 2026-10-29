@@ -109,7 +109,7 @@ func openFolder(path string) {
 
 // ensureFirewall adds an inbound Windows Firewall rule for the server once.
 // Changing the firewall needs admin rights, so Windows shows one UAC prompt.
-func ensureFirewall(javaPath string, port int) string {
+func ensureFirewall(dataDir, javaPath string, port int) string {
 	name := fmt.Sprintf("MC EasyHost (TCP %d)", port)
 	check := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+name)
 	check.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
@@ -126,4 +126,12 @@ func ensureFirewall(javaPath string, port int) string {
 		return "Windows Firewall was not changed (permission declined). If friends cannot connect, allow Java when Windows asks."
 	}
 	return fmt.Sprintf("Allowed port %d through Windows Firewall.", port)
+}
+
+// defaultDataDir is %APPDATA%\MC EasyHost.
+func defaultDataDir() string {
+	if d, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(d, "MC EasyHost")
+	}
+	return "MC EasyHost"
 }

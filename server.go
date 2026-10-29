@@ -370,7 +370,7 @@ func (m *Manager) setupNetwork(port int, upnp bool, java string) {
 	info := NetInfo{LanIP: lanIP(), Port: port}
 	m.update(func(s *Status) { s.Net = info })
 
-	if msg := ensureFirewall(java, port); msg != "" {
+	if msg := ensureFirewall(m.dataDir, java, port); msg != "" {
 		m.log("[EasyHost] " + msg)
 	}
 
