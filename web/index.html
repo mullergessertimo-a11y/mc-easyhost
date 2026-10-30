@@ -79,7 +79,31 @@ nav.tabs button.on { color: var(--text); border-color: var(--green); }
 nav.tabs button .count { background: var(--panel2); border-radius: 99px; padding: 0 7px; font-size: 11.5px; margin-left: 4px; }
 .tab { display: none; min-height: 0; overflow: auto; padding: 20px; }
 .tab.on { display: block; }
-#tab-console.on { display: grid; grid-template-rows: 1fr auto; gap: 10px; }
+#tab-console.on { display: grid; grid-template-rows: auto 1fr auto; gap: 10px; }
+.ctoolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ctoolbar .sp { flex: 1; }
+.chip { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 99px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+.chip:hover:not(:disabled) { border-color: var(--green); }
+.chip:disabled { opacity: .45; cursor: default; }
+#logFilter { width: 180px; padding: 5px 10px; font-size: 12.5px; }
+#log .hide { display: none; }
+.cmdwrap { position: relative; }
+.suggest { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); max-height: 260px; overflow: auto; background: var(--panel2); border: 1px solid #3a4047; border-radius: 8px; box-shadow: 0 -8px 24px #0006; z-index: 5; }
+.suggest div { display: flex; gap: 10px; padding: 6px 12px; cursor: pointer; font-size: 13px; align-items: baseline; }
+.suggest div b { font-family: var(--mono); font-weight: 500; white-space: nowrap; }
+.suggest div span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest div.sel, .suggest div:hover { background: #343a41; }
+.cmdhint { font-size: 12.5px; color: var(--muted); min-height: 18px; margin-bottom: 6px; }
+.cmdhint code { font-family: var(--mono); color: var(--text); }
+.cmdhint code i { font-style: normal; color: var(--green); text-decoration: underline; }
+.ref { max-width: 720px !important; width: 100%; max-height: 85vh; display: flex; flex-direction: column; }
+.ref .list { overflow: auto; margin-top: 12px; }
+.ref h5 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+.ref .rc { padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.ref .rc:hover { background: var(--panel2); }
+.ref .rc code { font-family: var(--mono); color: var(--green); }
+.ref .rc small { display: block; color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+.player select { padding: 4px 8px; font-size: 12.5px; }
 
 #log { font-family: var(--mono); font-size: 12.5px; line-height: 1.5; background: #0f1113; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; min-height: 0; }
 #log .w { color: var(--amber); } #log .e { color: #ff8a80; } #log .h { color: var(--blue); } #log .u { color: #c3e88d; }
@@ -210,23 +234,34 @@ input[type=range] { accent-color: var(--green); width: 100%; }
       </nav>
 
       <div class="tab on" id="tab-console">
+        <div class="ctoolbar">
+          <button class="chip" data-quick="day" data-t="time set day">☀ Day</button>
+          <button class="chip" data-quick="night" data-t="time set night">☾ Night</button>
+          <button class="chip" data-quick="clear" data-t="weather clear">Clear weather</button>
+          <button class="chip" data-quick="keepon">Keep inventory on</button>
+          <button class="chip" data-quick="keepoff">Keep inventory off</button>
+          <button class="chip" data-quick="save" data-t="save-all">Save now</button>
+          <button class="chip" data-quick="say">Message everyone…</button>
+          <span class="sp"></span>
+          <input type="text" id="logFilter" placeholder="Filter console…" autocomplete="off">
+        </div>
         <div id="log"><div class="empty">The server's output will show up here.</div></div>
-        <form class="cmd" id="cmdForm" autocomplete="off">
-          <input type="text" id="cmdInput" placeholder="Type a server command, e.g.  op YourName   or   time set day" disabled>
-          <button class="btn" disabled id="cmdBtn">Send</button>
-        </form>
+        <div class="cmdwrap">
+          <div class="suggest" id="suggest" hidden></div>
+          <div class="cmdhint" id="cmdHint">Start typing a command: suggestions appear, <b>Tab</b> completes, <b>↑ ↓</b> pick.</div>
+          <form class="cmd" id="cmdForm" autocomplete="off">
+            <input type="text" id="cmdInput" placeholder="Type a command, e.g.  gamemode creative Steve" disabled spellcheck="false">
+            <button class="btn" disabled id="cmdBtn">Send</button>
+            <button class="btn" type="button" id="cmdRef">All commands</button>
+          </form>
+        </div>
       </div>
 
       <div class="tab" id="tab-players">
+        <div class="sec">Online now</div>
         <div class="players" id="players"></div>
-        <div style="max-width:640px;margin-top:24px">
-          <div class="label" style="margin-bottom:8px">Add someone by name (works while the server runs)</div>
-          <form class="cmd" id="nameForm" autocomplete="off">
-            <input type="text" id="nameInput" placeholder="Minecraft name" maxlength="16">
-            <button class="btn" data-act="whitelist add">Add to whitelist</button>
-            <button class="btn" data-act="op">Make admin</button>
-          </form>
-        </div>
+        <div class="note" id="listsNote"></div>
+        <div id="lists"></div>
       </div>
 
       <div class="tab" id="tab-mods">
@@ -320,6 +355,19 @@ input[type=range] { accent-color: var(--green); width: 100%; }
           <label class="check"><input type="checkbox" name="whitelist"><span>Whitelist only<small>Only names you add can join.</small></span></label>
           <label class="check"><input type="checkbox" name="upnp"><span>Open port on router automatically<small>Uses UPnP so friends over the internet can join.</small></span></label>
           <label class="check"><input type="checkbox" name="onlineMode"><span>Check Minecraft accounts<small>Keep on. Turning it off lets anyone join with any name.</small></span></label>
+          <label class="field">
+            <span>Automatic backups</span>
+            <select name="autoBackupHours" data-num>
+              <option value="0">Off</option><option value="1">Every hour</option><option value="3">Every 3 hours</option>
+              <option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24">Once a day</option>
+            </select>
+            <small>Only while the server runs. Older automatic backups are deleted.</small>
+          </label>
+          <label class="field">
+            <span>Automatic backups to keep</span>
+            <input type="number" name="autoBackupKeep" min="1" max="50">
+          </label>
+          <label class="check"><input type="checkbox" name="autoRestart"><span>Restart after a crash<small>At most 3 times in 15 minutes, so a broken setup doesn't loop.</small></span></label>
           <div class="save-row">
             <button class="btn primary" type="submit">Save settings</button>
             <span class="note" id="saveNote"></span>
@@ -346,6 +394,8 @@ input[type=range] { accent-color: var(--green); width: 100%; }
         <p><b>Simple Voice Chat</b> works on both. Every player needs the voice chat mod in their own Minecraft. EasyHost also opens its voice port (UDP 24454).</p>
         <h4>Seeds and existing worlds</h4>
         <p>On the <b>World</b> tab you can start a new world from a seed, play one of your singleplayer worlds with friends, or upload a world someone sent you as a zip. The current world is always backed up first, and you can restore any backup there.</p>
+        <h4>Finding the right command</h4>
+        <p>Just start typing in the console: suggestions appear with a short explanation, and <b>Tab</b> completes them, including player names, items and game rules. <b>All commands</b> lists everything in plain words. The buttons above the console do the most common things in one click.</p>
         <h4>Making yourself admin</h4>
         <p>Go to <b>Players</b>, type your name and press <b>Make admin</b>. Then you can use commands like <code>/gamemode creative</code> in game.</p>
         <h4>Where is my world?</h4>
@@ -370,8 +420,18 @@ input[type=range] { accent-color: var(--green); width: 100%; }
   </div>
 </div>
 
+<div class="modal" id="refModal">
+  <div class="card ref">
+    <div style="display:flex;gap:10px;align-items:center"><h2 style="margin:0;flex:1">Server commands</h2><button class="btn small" id="refClose">Close</button></div>
+    <input type="text" id="refSearch" placeholder="What do you want to do? e.g. teleport, items, night, ban…" style="margin-top:12px" autocomplete="off">
+    <div class="list" id="refList"></div>
+    <div class="note">Click a command to put it in the console. <code>&lt;…&gt;</code> must be filled in, <code>[…]</code> is optional.</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
+<script src="commands.js"></script>
 <script>
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -445,17 +505,21 @@ function render() {
 
   const canCmd = st === 'running' || st === 'starting';
   $('#cmdInput').disabled = $('#cmdBtn').disabled = !canCmd;
+  $$('[data-quick]').forEach(b => { b.disabled = !canCmd; b.title = canCmd ? (b.dataset.t || '') : 'Start the server first'; });
   $('#lockNote').hidden = st === 'stopped' || st === 'error';
 
   const players = s.players || [];
   $('#playerCount').textContent = count;
   const unnamed = Math.max(0, count - players.length);
+  const isOp = p => (lists.ops || []).some(o => o.name.toLowerCase() === p.toLowerCase());
   $('#players').innerHTML = count ? players.map(p => `
     <div class="player">
       <img src="https://mc-heads.net/avatar/${encodeURIComponent(p)}/32" alt="" onerror="this.style.visibility='hidden'">
-      <b>${esc(p)}</b>
-      <button class="btn small" data-cmd="op ${esc(p)}">Make admin</button>
+      <b>${esc(p)}${isOp(p) ? ' <span class="badge ok">admin</span>' : ''}</b>
+      <select data-gm="${esc(p)}" title="Game mode"><option value="">Game mode…</option><option>survival</option><option>creative</option><option>adventure</option><option>spectator</option></select>
+      <button class="btn small" data-cmd="${isOp(p) ? 'deop' : 'op'} ${esc(p)}">${isOp(p) ? 'Remove admin' : 'Make admin'}</button>
       <button class="btn small" data-cmd="kick ${esc(p)}">Kick</button>
+      <button class="btn small" data-ban="${esc(p)}">Ban</button>
     </div>`).join('') + (unnamed ? `<div class="empty-state" style="padding:8px 0">+ ${unnamed} more player${unnamed > 1 ? 's' : ''} (the server didn't share ${players.length ? 'their' : 'the'} names)</div>` : '') : `<div class="empty-state">${st === 'running' ? 'Nobody is online yet.' : 'Start the server to see who is playing.'}</div>`;
 }
 
@@ -481,6 +545,7 @@ function addLines(lines) {
     else if (l.startsWith('> ')) d.className = 'u';
     else if (/\b(WARN|WARNING)\b/.test(l)) d.className = 'w';
     else if (/\b(ERROR|SEVERE|Exception)\b/.test(l)) d.className = 'e';
+    if (logFilter && !l.toLowerCase().includes(logFilter)) d.classList.add('hide');
     frag.appendChild(d);
   }
   logEl.appendChild(frag);
@@ -488,17 +553,110 @@ function addLines(lines) {
   if (stick) logEl.scrollTop = logEl.scrollHeight;
 }
 
+let logFilter = '';
+$('#logFilter').addEventListener('input', e => {
+  logFilter = e.target.value.trim().toLowerCase();
+  for (const d of logEl.children) d.classList.toggle('hide', !!logFilter && !d.textContent.toLowerCase().includes(logFilter));
+  logEl.scrollTop = logEl.scrollHeight;
+});
+
+// Command input with suggestions (logic in commands.js).
+const MC = window.MCCommands;
+let lists = {}, modSlugs = [];
+const cmdCtx = () => ({ players: status.players || [], version: status.version || config.version, serverType: config.serverType, mods: modSlugs });
+const cmdInput = $('#cmdInput'), sugEl = $('#suggest');
+let sugItems = [], sugSel = -1;
 const cmdHistory = []; let hIdx = 0;
+function defaultHint() { return 'Start typing a command: suggestions appear, <b>Tab</b> completes, <b>↑ ↓</b> pick.'; }
+function updateSuggest() {
+  const v = cmdInput.value;
+  if (!v.trim()) { sugEl.hidden = true; sugItems = []; $('#cmdHint').innerHTML = defaultHint(); return; }
+  const r = MC.suggest(v, cmdCtx());
+  sugItems = r.items; sugSel = -1;
+  const cur = v.split(' ').pop();
+  // Hide the list once the only option is exactly what is typed.
+  const exact = sugItems.length === 1 && sugItems[0].label.toLowerCase() === cur.toLowerCase();
+  sugEl.hidden = !sugItems.length || exact;
+  sugEl.innerHTML = sugItems.map((it, i) => `<div data-i="${i}"><b>${esc(it.label)}</b><span>${esc(it.desc || '')}${it.usage ? ' · ' + esc(it.usage) : ''}</span></div>`).join('');
+  const h = r.hint;
+  if (h) {
+    const parts = h.usage.map((p, i) => i === h.index ? `<i>${esc(p)}</i>` : esc(p)).join(' ');
+    const argHint = h.arg && MC.HINTS[h.arg] ? ` · ${esc(h.arg)}: ${esc(MC.HINTS[h.arg])}` : '';
+    $('#cmdHint').innerHTML = `<code>/${esc(h.cmd)} ${parts}</code> · ${esc(h.desc)}${argHint}`;
+  } else if (!sugItems.length && !v.includes(' ')) {
+    $('#cmdHint').innerHTML = 'No matching command. Click <b>All commands</b> to browse.';
+  } else if (!sugItems.length) {
+    $('#cmdHint').innerHTML = 'This command is sent as typed. Type <code>help</code> to see every command the server knows.';
+  } else $('#cmdHint').innerHTML = defaultHint();
+}
+function markSel() { [...sugEl.children].forEach((d, i) => d.classList.toggle('sel', i === sugSel)); sugEl.children[sugSel]?.scrollIntoView({ block: 'nearest' }); }
+function acceptSuggestion(i) {
+  const it = sugItems[i < 0 ? 0 : i]; if (!it) return;
+  cmdInput.value = it.value; cmdInput.focus(); updateSuggest();
+}
+cmdInput.addEventListener('input', updateSuggest);
+cmdInput.addEventListener('focus', updateSuggest);
+cmdInput.addEventListener('blur', () => setTimeout(() => sugEl.hidden = true, 150));
+sugEl.addEventListener('mousedown', e => { const d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); acceptSuggestion(+d.dataset.i); } });
+cmdInput.addEventListener('keydown', e => {
+  const open = !sugEl.hidden && sugItems.length;
+  if (e.key === 'Tab' && open) { e.preventDefault(); acceptSuggestion(sugSel); return; }
+  if (e.key === 'Escape') { sugEl.hidden = true; return; }
+  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    e.preventDefault();
+    sugSel = (sugSel + (e.key === 'ArrowDown' ? 1 : -1) + sugItems.length) % sugItems.length;
+    return markSel();
+  }
+  if (open && e.key === 'Enter' && sugSel >= 0) { e.preventDefault(); acceptSuggestion(sugSel); return; }
+  if (e.key === 'ArrowUp' && hIdx > 0) { cmdInput.value = cmdHistory[--hIdx]; e.preventDefault(); }
+  if (e.key === 'ArrowDown') { hIdx = Math.min(cmdHistory.length, hIdx + 1); cmdInput.value = cmdHistory[hIdx] || ''; e.preventDefault(); }
+});
+async function sendCommand(v) {
+  try { await call('command', { command: v }); return true; } catch (err) { toast(err.message, true); return false; }
+}
 $('#cmdForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const v = $('#cmdInput').value.trim(); if (!v) return;
+  const v = cmdInput.value.trim(); if (!v) return;
   cmdHistory.push(v); hIdx = cmdHistory.length;
-  $('#cmdInput').value = '';
-  try { await call('command', { command: v }); } catch (err) { toast(err.message, true); }
+  cmdInput.value = ''; updateSuggest();
+  await sendCommand(v);
 });
-$('#cmdInput').addEventListener('keydown', e => {
-  if (e.key === 'ArrowUp' && hIdx > 0) { $('#cmdInput').value = cmdHistory[--hIdx]; e.preventDefault(); }
-  if (e.key === 'ArrowDown') { hIdx = Math.min(cmdHistory.length, hIdx + 1); $("#cmdInput").value = cmdHistory[hIdx] || ''; e.preventDefault(); }
+
+// Quick actions
+$('.ctoolbar').addEventListener('click', async e => {
+  const b = e.target.closest('[data-quick]'); if (!b) return;
+  const v = status.version || config.version;
+  const keep = MC.ruleName(v, 'keep_inventory', 'keepInventory');
+  const map = { day: 'time set day', night: 'time set night', clear: 'weather clear', save: 'save-all',
+    keepon: `gamerule ${keep} true`, keepoff: `gamerule ${keep} false` };
+  let cmd = map[b.dataset.quick];
+  if (b.dataset.quick === 'say') {
+    const msg = prompt('Message to everyone on the server:');
+    if (!msg || !msg.trim()) return;
+    cmd = 'say ' + msg.replace(/[\r\n]+/g, ' ').trim();
+  }
+  if (await sendCommand(cmd)) toast('Done: ' + cmd);
+});
+
+// Command reference
+function renderRef() {
+  const q = $('#refSearch').value.trim().toLowerCase();
+  const cmds = MC.availableCommands(cmdCtx()).filter(c => !q || (c.n + ' ' + c.d + ' ' + (c.a || []).join(' ') + ' ' + c.cat + ' ' + c.u.join(' ')).toLowerCase().includes(q));
+  const cats = [...new Set(cmds.map(c => c.cat))];
+  $('#refList').innerHTML = cats.map(cat => `<h5>${esc(cat)}</h5>` + cmds.filter(c => c.cat === cat).map(c => `
+    <div class="rc" data-ref="${esc(c.n)}"><code>/${esc(c.n)}</code> ${esc(c.d)}
+      <small>${c.u.map(u => '/' + esc(c.n) + (u ? ' ' + esc(u) : '')).join('<br>')}</small></div>`).join('')).join('')
+    || '<div class="empty-state">Nothing found. The server may still know it: type <code>help</code> in the console.</div>';
+}
+$('#cmdRef').addEventListener('click', () => { $('#refModal').classList.add('on'); $('#refSearch').value = ''; renderRef(); $('#refSearch').focus(); });
+$('#refClose').addEventListener('click', () => $('#refModal').classList.remove('on'));
+$('#refModal').addEventListener('click', e => { if (e.target.id === 'refModal') $('#refModal').classList.remove('on'); });
+$('#refSearch').addEventListener('input', renderRef);
+$('#refList').addEventListener('click', e => {
+  const d = e.target.closest('[data-ref]'); if (!d) return;
+  $('#refModal').classList.remove('on');
+  if (cmdInput.disabled) return toast('Start the server to use commands.');
+  cmdInput.value = d.dataset.ref + ' '; cmdInput.focus(); updateSuggest();
 });
 
 // ---------- events ----------
@@ -533,6 +691,7 @@ $$('nav.tabs button').forEach(b => b.addEventListener('click', () => {
   $$('nav.tabs button').forEach(x => x.classList.toggle('on', x === b));
   $$('.tab').forEach(t => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
   if (b.dataset.tab === 'mods') loadMods();
+  if (b.dataset.tab === 'players') loadLists();
   if (b.dataset.tab === 'world') loadWorlds();
 }));
 const stopped = () => status.state === 'stopped' || status.state === 'error';
@@ -580,6 +739,7 @@ async function loadMods() {
     ? `<div class="infobox">Fabric ${esc(d.version || '')} server. Mods marked <span class="badge warn">players need it too</span> must also be installed by everyone who joins, together with <a href="https://fabricmc.net/use/installer/" target="_blank" rel="noopener" style="color:var(--blue)">Fabric</a>. The others work with a normal Minecraft client.</div>`
     : `<div class="infobox">Paper ${esc(d.version || '')} server. Plugins run only on the server, so friends join with normal Minecraft. Simple Voice Chat is the exception: players need its mod to talk.</div>`;
   const list = d.installed || [];
+  modSlugs = list.map(m => m.slug).filter(Boolean);
   $('#modsCount').textContent = list.length;
   $('#modsInstalled').innerHTML = list.length ? list.map(m => modItem(m, 'installed')).join('') : `<div class="empty-state" style="padding:10px 0">No ${typeWord()} yet. Search below.</div>`;
   $('#modsUpdate').disabled = !stopped() || !list.some(m => !m.unknown);
@@ -698,14 +858,61 @@ $('#quitBtn').addEventListener('click', async () => {
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-cmd]'); if (!b) return;
   try { await call('command', { command: b.dataset.cmd }); toast('Done: ' + b.dataset.cmd); } catch (err) { toast(err.message, true); }
+  if (/^(de)?op /.test(b.dataset.cmd)) setTimeout(loadLists, 700);
 });
-$('#nameForm').addEventListener('click', async e => {
-  const b = e.target.closest('[data-act]'); if (!b) return;
+// Admins, whitelist, bans
+const LIST_META = {
+  ops: { title: 'Admins', add: 'Make admin', empty: 'No admins yet. Add yourself so you can use commands in the game.' },
+  whitelist: { title: 'Whitelist', add: 'Add', empty: 'Nobody on the whitelist.' },
+  bans: { title: 'Banned', add: 'Ban', empty: 'Nobody is banned.' },
+};
+async function loadLists() {
+  try { lists = await call('lists'); } catch (err) { $('#lists').innerHTML = `<div class="note warn">${esc(err.message)}</div>`; return; }
+  const live = status.state === 'running' || status.state === 'starting';
+  $('#listsNote').textContent = live ? '' : 'The server is off: changes are saved straight to its files and apply on the next start.';
+  $('#lists').innerHTML = ['ops', 'whitelist', 'bans'].map(k => {
+    const m = LIST_META[k], items = lists[k] || [];
+    const extra = k === 'whitelist' ? ` <span class="badge ${config.whitelist ? 'ok' : ''}">${config.whitelist ? 'on' : 'off: anyone can join'}</span>` : '';
+    return `<div class="sec">${m.title} <span class="badge">${items.length}</span>${extra}</div>
+      <div class="list">${items.length ? items.map(it => `<div class="item">
+        <img src="https://mc-heads.net/avatar/${encodeURIComponent(it.name)}/40" alt="" onerror="this.style.visibility='hidden'">
+        <div class="txt"><b>${esc(it.name)}</b><small>${esc(it.reason || it.uuid || '')}</small></div>
+        <button class="btn small" data-list="${k}" data-action="remove" data-name="${esc(it.name)}">${k === 'bans' ? 'Unban' : 'Remove'}</button></div>`).join('')
+        : `<div class="empty-state" style="padding:6px 0">${m.empty}</div>`}</div>
+      <form class="inline-form" data-addlist="${k}" style="margin-top:8px" autocomplete="off">
+        <input type="text" maxlength="16" placeholder="Minecraft name"><button class="btn">${m.add}</button></form>`;
+  }).join('');
+  render();
+}
+async function changeList(kind, action, name, reason) {
+  try {
+    await call('lists', { kind, action, name, reason: reason || '' });
+    toast(`${action === 'add' ? 'Added' : 'Removed'} ${name}`);
+    setTimeout(loadLists, status.state === 'running' ? 700 : 0); // let the server write its file
+  } catch (err) { toast(err.message, true); }
+}
+$('#lists').addEventListener('click', e => {
+  const b = e.target.closest('[data-list]'); if (!b) return;
+  changeList(b.dataset.list, b.dataset.action, b.dataset.name);
+});
+$('#lists').addEventListener('submit', e => {
+  const f = e.target.closest('[data-addlist]'); if (!f) return;
   e.preventDefault();
-  const name = $('#nameInput').value.trim();
+  const name = f.querySelector('input').value.trim();
   if (!/^[A-Za-z0-9_]{2,16}$/.test(name)) return toast('Enter a valid Minecraft name', true);
-  try { await call('command', { command: b.dataset.act + ' ' + name }); toast('Done: ' + b.dataset.act + ' ' + name); $('#nameInput').value = ''; }
-  catch (err) { toast(err.message, true); }
+  const reason = f.dataset.addlist === 'bans' ? (prompt('Reason (optional):') || '') : '';
+  changeList(f.dataset.addlist, 'add', name, reason);
+});
+$('#players').addEventListener('change', async e => {
+  const s = e.target.closest('[data-gm]'); if (!s || !s.value) return;
+  const cmd = `gamemode ${s.value} ${s.dataset.gm}`;
+  if (await sendCommand(cmd)) toast('Done: ' + cmd);
+  s.value = '';
+});
+$('#players').addEventListener('click', e => {
+  const b = e.target.closest('[data-ban]'); if (!b) return;
+  if (!confirm(`Ban ${b.dataset.ban}? They can't come back until you unban them.`)) return;
+  changeList('bans', 'add', b.dataset.ban, prompt('Reason (optional):') || '');
 });
 window.addEventListener('beforeunload', e => {
   if (status.state === 'running' || status.state === 'starting') { e.preventDefault(); e.returnValue = ''; }
@@ -744,7 +951,7 @@ form.addEventListener('submit', async e => {
     if (!el.name) continue;
     if (el.type === 'checkbox') c[el.name] = el.checked;
     else if (el.type === 'radio') { if (el.checked) c[el.name] = el.value; }
-    else if (el.type === 'number' || el.type === 'range') c[el.name] = +el.value;
+    else if (el.type === 'number' || el.type === 'range' || 'num' in el.dataset) c[el.name] = +el.value;
     else c[el.name] = el.value;
   }
   if (c.whitelist && !config.whitelist) toast('Remember to add yourself and your friends on the Players tab.');
@@ -768,6 +975,8 @@ form.addEventListener('submit', async e => {
   fillForm(); render(); connect();
   $('#modsTabBtn').firstChild.textContent = config.serverType === 'paper' ? 'Plugins' : 'Mods';
   loadVersions(config.serverType);
+  loadLists();
+  call('mods').then(d => { modSlugs = (d.installed || []).map(m => m.slug).filter(Boolean); }).catch(() => {});
 })();
 </script>
 </body>

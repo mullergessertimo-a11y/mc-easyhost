@@ -251,6 +251,27 @@ func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan str
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 
+	// ---- admins, whitelist, bans ----
+	mux.HandleFunc("GET /api/lists", func(w http.ResponseWriter, r *http.Request) {
+		lists, err := mgr.PlayerLists()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, lists)
+	})
+	mux.HandleFunc("POST /api/lists", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Kind, Action, Name, Reason string
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		if err := mgr.ChangeList(body.Kind, body.Action, body.Name, body.Reason); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+
 	// ---- mods / plugins ----
 	mux.HandleFunc("GET /api/mods", func(w http.ResponseWriter, r *http.Request) {
 		list, folder, err := mgr.ListMods()

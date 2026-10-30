@@ -58,6 +58,8 @@ type Manager struct {
 	stopReq  bool
 	exited   chan struct{}
 	mappings []*portMapping
+	crashes  []time.Time // recent crashes, for the auto-restart limit
+	backupMu sync.Mutex
 }
 
 func NewManager(dataDir string, cfg *ConfigStore, hub *Hub) *Manager {
@@ -245,6 +247,7 @@ func (m *Manager) run() error {
 
 	go m.readOutput(pr)
 	go m.watchPlayers(cfg.Port, exited)
+	go m.autoBackups(exited)
 	go func() {
 		err := cmd.Wait()
 		pw.Close()
@@ -398,6 +401,76 @@ func (m *Manager) onExit(err error) {
 	}
 	m.log("[EasyHost] " + msg + " (" + err.Error() + ")")
 	m.update(func(s *Status) { s.State = StateError; s.Error = msg; s.Step = ""; s.Started = 0; s.Net.UPnP = "" })
+
+	// A crash after the world was up (not a broken start) is restarted,
+	// but not endlessly: at most 3 times in 15 minutes.
+	if !wasRunning || !m.cfg.Get().AutoRestart {
+		return
+	}
+	m.mu.Lock()
+	recent := m.crashes[:0]
+	for _, t := range m.crashes {
+		if time.Since(t) < 15*time.Minute {
+			recent = append(recent, t)
+		}
+	}
+	m.crashes = append(recent, time.Now())
+	n := len(m.crashes)
+	m.mu.Unlock()
+	if n > 3 {
+		m.log("[EasyHost] The server crashed 4 times in 15 minutes, so it is not restarted automatically. Check the console for the reason.")
+		return
+	}
+	m.log(fmt.Sprintf("[EasyHost] Restarting automatically in 10 seconds (crash %d of 3 allowed in 15 minutes).", n))
+	go func() {
+		time.Sleep(10 * time.Second)
+		if m.Status().State == StateError {
+			if err := m.Start(); err != nil {
+				m.log("[EasyHost] Automatic restart failed: " + err.Error())
+			}
+		}
+	}()
+}
+
+// autoBackups backs the world up every few hours while the server runs and
+// keeps only the newest automatic backups.
+func (m *Manager) autoBackups(exited chan struct{}) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	last := time.Now()
+	for {
+		select {
+		case <-exited:
+			return
+		case <-t.C:
+		}
+		cfg := m.cfg.Get()
+		if cfg.AutoBackupHours <= 0 || m.Status().State != StateRunning ||
+			time.Since(last) < time.Duration(cfg.AutoBackupHours)*time.Hour {
+			continue
+		}
+		last = time.Now()
+		if _, err := m.backupWorld("auto-world"); err != nil {
+			m.log("[EasyHost] Automatic backup failed: " + err.Error())
+			continue
+		}
+		m.pruneAutoBackups(cfg.AutoBackupKeep)
+	}
+}
+
+func (m *Manager) pruneAutoBackups(keep int) {
+	entries, _ := os.ReadDir(m.backupDir())
+	var autos []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "auto-world-") && strings.HasSuffix(e.Name(), ".zip") {
+			autos = append(autos, e.Name())
+		}
+	}
+	sort.Strings(autos) // names hold the timestamp, so this is oldest first
+	for len(autos) > keep {
+		os.Remove(filepath.Join(m.backupDir(), autos[0]))
+		autos = autos[1:]
+	}
 }
 
 // Stop asks the server to save and shut down; kills it if it hangs.
@@ -533,7 +606,11 @@ func (m *Manager) cleanupOldJars(keep string) {
 }
 
 // Backup zips the world folders into dataDir/backups.
-func (m *Manager) Backup() (string, error) {
+func (m *Manager) Backup() (string, error) { return m.backupWorld("world") }
+
+func (m *Manager) backupWorld(prefix string) (string, error) {
+	m.backupMu.Lock()
+	defer m.backupMu.Unlock()
 	running := m.Status().State == StateRunning
 	if running {
 		m.Command("save-off")
@@ -543,7 +620,7 @@ func (m *Manager) Backup() (string, error) {
 	}
 	dir := filepath.Join(m.dataDir, "backups")
 	os.MkdirAll(dir, 0o755)
-	name := "world-" + time.Now().Format("2006-01-02_15-04-05") + ".zip"
+	name := prefix + "-" + time.Now().Format("2006-01-02_15-04-05") + ".zip"
 	out := filepath.Join(dir, name)
 	f, err := os.Create(out)
 	if err != nil {

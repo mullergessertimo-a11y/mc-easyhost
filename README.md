@@ -56,7 +56,15 @@ Then browse to http://127.0.0.1:47615. To start it on boot, use the included `mc
   (one password prompt). It also opens the port on the router via **UPnP**, explaining what to change when the
   router refuses.
 - Shows the LAN and internet addresses to share, and warns when the provider uses CGNAT
-- Live console, command input, player list (op/kick), whitelist, world backups (zip). The player count
+- **Command helper:** the console suggests commands as you type, with a plain explanation of each, and **Tab**
+  completes them: online player names, items, effects, mobs, structures and game rules (new snake_case
+  names from 26.1, old ones before). "All commands" is a searchable reference, and one-click buttons do the
+  common things (day/night, weather, keep inventory, save, message everyone). The console can be filtered.
+- **Players:** game mode, admin, kick and ban per player, plus admin, whitelist and ban lists. While the server is
+  off these are edited in the files directly (with the real Mojang account ID), so you can set them up first.
+- **Safety:** automatic backups while the server runs (every 6 hours by default, newest 5 kept) and an automatic
+  restart after a crash (at most 3 times in 15 minutes).
+- Live console, command input, world backups (zip). The player count
   comes from the server itself (the same status ping the Minecraft server list uses), so it is always right.
 - Refuses to start a world on an older version than it was last played on, since that would corrupt it
 - Closing the window saves the world and stops the server, and Java never outlives the app. On Windows a job
@@ -83,6 +91,8 @@ in a chromeless browser window (`--app`). The local API only accepts requests wi
 | `network.go` | LAN/public IP, UPnP port mapping and router error hints |
 | `slp.go` | Minecraft status ping for the live player count |
 | `mods.go` | Modrinth search/install/remove, dependency resolution, voice chat port |
+| `playerlists.go` | Admins, whitelist and bans; Mojang/offline account IDs |
+| `web/commands.js` | Command reference and autocomplete |
 | `worlds.go`, `nbt.go` | Seeds, singleplayer import, zip upload, backups; level.dat reader |
 | `platform_windows.go` | Job object, hidden console, Edge window, Windows Firewall, RAM |
 | `platform_other.go` | Linux/macOS: data folder, browser window, RAM |
