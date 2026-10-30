@@ -2,6 +2,10 @@
 
 One-click Minecraft Java server for **Windows** and **Linux**. Start the app and press **Start Server**.
 
+![MC EasyHost control panel](docs/screenshot.png)
+
+*Unofficial tool, not affiliated with Mojang or Microsoft.*
+
 ## Download
 
 Grab the file for your system from the [Releases](../../releases) page:
@@ -12,10 +16,13 @@ Grab the file for your system from the [Releases](../../releases) page:
 | Linux (x86-64) | `mc-easyhost-linux-x86_64.tar.gz` |
 | Linux (ARM64, e.g. Raspberry Pi 4/5) | `mc-easyhost-linux-aarch64.tar.gz` |
 
+**Windows says "Windows protected your PC"?** The exe isn't code-signed (that costs money), so SmartScreen warns
+about every new download. Click **More info**, then **Run anyway**. You only have to do this once.
+
 ### Linux install
 
-1. Download `mc-easyhost-linux-x86_64.tar.gz` from the [Releases](../../releases) page. While this repository is
-   private, that only works in a browser where you are signed in to GitHub. The file lands in `~/Downloads`.
+1. Download `mc-easyhost-linux-x86_64.tar.gz` from the [Releases](../../releases) page. The file lands in
+   `~/Downloads`.
 2. Open a terminal and run:
 
    ```bash
