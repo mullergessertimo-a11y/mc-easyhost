@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -67,19 +68,22 @@ func releaseVersions(serverType string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var paper map[string]bool
-	if serverType == "paper" {
-		paper, err = paperVersions()
-		if err != nil {
-			return nil, err
-		}
+	var supported map[string]bool
+	switch serverType {
+	case "paper":
+		supported, err = paperVersions()
+	case "fabric":
+		supported, err = fabricGameVersions()
+	}
+	if err != nil {
+		return nil, err
 	}
 	var out []string
 	for _, v := range m.Versions {
 		if v.Type != "release" {
 			continue
 		}
-		if paper != nil && !paper[v.ID] {
+		if supported != nil && !supported[v.ID] {
 			continue
 		}
 		out = append(out, v.ID)
@@ -116,10 +120,10 @@ func resolveBuild(serverType, version string) (*ServerBuild, error) {
 		return nil, fmt.Errorf("could not reach Mojang (are you online?): %w", err)
 	}
 	if version == "latest" {
-		if serverType == "paper" {
-			list, err := releaseVersions("paper")
+		if serverType != "vanilla" {
+			list, err := releaseVersions(serverType)
 			if err != nil || len(list) == 0 {
-				return nil, fmt.Errorf("could not reach PaperMC: %v", err)
+				return nil, fmt.Errorf("could not reach %s: %v", typeLabel(serverType), err)
 			}
 			version = list[0]
 		} else {
@@ -145,6 +149,21 @@ func resolveBuild(serverType, version string) (*ServerBuild, error) {
 	}
 	// Adoptium only ships LTS JREs; round odd versions (e.g. 16) up.
 	java = ltsJava(java)
+
+	if serverType == "fabric" {
+		loader, installer, err := fabricLoaderAndInstaller()
+		if err != nil {
+			return nil, fmt.Errorf("could not reach Fabric: %w", err)
+		}
+		// The launcher jar downloads the matching vanilla server on first start.
+		return &ServerBuild{
+			Version: version,
+			JarName: fmt.Sprintf("fabric-server-mc.%s-loader.%s-launcher.%s.jar", version, loader, installer),
+			URL: fmt.Sprintf("https://meta.fabricmc.net/v2/versions/loader/%s/%s/%s/server/jar",
+				url.PathEscape(version), url.PathEscape(loader), url.PathEscape(installer)),
+			JavaMajor: java,
+		}, nil
+	}
 
 	if serverType == "vanilla" {
 		if mv.Downloads.Server.URL == "" {
@@ -185,4 +204,50 @@ func ltsJava(v int) int {
 		}
 	}
 	return v
+}
+
+// fabricGameVersions lists the stable Minecraft versions Fabric supports.
+func fabricGameVersions() (map[string]bool, error) {
+	var list []struct {
+		Version string `json:"version"`
+		Stable  bool   `json:"stable"`
+	}
+	if err := getJSON("https://meta.fabricmc.net/v2/versions/game", &list); err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, v := range list {
+		if v.Stable {
+			out[v.Version] = true
+		}
+	}
+	return out, nil
+}
+
+// fabricLoaderAndInstaller returns the newest stable loader and installer.
+func fabricLoaderAndInstaller() (loader, installer string, err error) {
+	type entry struct {
+		Version string `json:"version"`
+		Stable  bool   `json:"stable"`
+	}
+	newestStable := func(path string) (string, error) {
+		var list []entry
+		if err := getJSON("https://meta.fabricmc.net/v2/versions/"+path, &list); err != nil {
+			return "", err
+		}
+		for _, e := range list {
+			if e.Stable {
+				return e.Version, nil
+			}
+		}
+		if len(list) > 0 {
+			return list[0].Version, nil
+		}
+		return "", fmt.Errorf("no Fabric %s found", path)
+	}
+	if loader, err = newestStable("loader"); err != nil {
+		return
+	}
+	installer, err = newestStable("installer")
+	return
 }

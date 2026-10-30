@@ -107,25 +107,44 @@ func openFolder(path string) {
 	exec.Command("explorer.exe", path).Start()
 }
 
-// ensureFirewall adds an inbound Windows Firewall rule for the server once.
-// Changing the firewall needs admin rights, so Windows shows one UAC prompt.
-func ensureFirewall(dataDir, javaPath string, port int) string {
-	name := fmt.Sprintf("MC EasyHost (TCP %d)", port)
-	check := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+name)
-	check.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
-	if check.Run() == nil {
+// ensureFirewall adds inbound Windows Firewall rules for the server port
+// (TCP) and any mod ports (UDP, e.g. voice chat), each only once. Changing
+// the firewall needs admin rights, so Windows shows one UAC prompt for all
+// missing rules together.
+func ensureFirewall(dataDir, javaPath string, port int, udp []int) string {
+	type rule struct {
+		proto string
+		port  int
+	}
+	want := []rule{{"TCP", port}}
+	for _, u := range udp {
+		want = append(want, rule{"UDP", u})
+	}
+	var missing []string
+	var added []string
+	for _, r := range want {
+		name := fmt.Sprintf("MC EasyHost (%s %d)", r.proto, r.port)
+		check := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+name)
+		check.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+		if check.Run() == nil {
+			continue
+		}
+		missing = append(missing, fmt.Sprintf(`netsh advfirewall firewall add rule name="%s" dir=in action=allow protocol=%s localport=%d program="%s" profile=any`,
+			name, r.proto, r.port, javaPath))
+		added = append(added, fmt.Sprintf("%s %d", r.proto, r.port))
+	}
+	if len(missing) == 0 {
 		return ""
 	}
-	args := fmt.Sprintf(`advfirewall firewall add rule name="%s" dir=in action=allow protocol=TCP localport=%d program="%s" profile=any`,
-		name, port, javaPath)
-	ps := fmt.Sprintf(`Start-Process -FilePath netsh -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '%s'`,
-		strings.ReplaceAll(args, "'", "''"))
+	// One elevated cmd runs every netsh call, so there is a single prompt.
+	ps := fmt.Sprintf(`Start-Process -FilePath cmd -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '/c %s'`,
+		strings.ReplaceAll(strings.Join(missing, " & "), "'", "''"))
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 	if err := cmd.Run(); err != nil {
 		return "Windows Firewall was not changed (permission declined). If friends cannot connect, allow Java when Windows asks."
 	}
-	return fmt.Sprintf("Allowed port %d through Windows Firewall.", port)
+	return "Allowed " + strings.Join(added, ", ") + " through Windows Firewall."
 }
 
 // defaultDataDir is %APPDATA%\MC EasyHost.

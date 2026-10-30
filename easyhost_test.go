@@ -37,7 +37,7 @@ func TestServerPropertiesKeepsUnmanagedKeys(t *testing.T) {
 	c := defaultConfig()
 	c.MOTD = "Grüße"
 	c.MaxPlayers = 7
-	if err := writeServerProperties(p, c); err != nil {
+	if err := writeServerProperties(p, c, "26.3"); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)

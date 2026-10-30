@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,7 +25,8 @@ import (
 var webFS embed.FS
 
 // A fixed port lets a second launch find the running instance.
-const uiPort = 47615
+// EASYHOST_PORT moves it, so a development copy can run next to the real one.
+var uiPort = 47615
 
 // version is set at build time with -ldflags "-X main.version=v1.2.3".
 var version = "dev"
@@ -36,6 +38,10 @@ func main() {
 	if *showVersion {
 		fmt.Println("MC EasyHost", version)
 		return
+	}
+
+	if p, err := strconv.Atoi(os.Getenv("EASYHOST_PORT")); err == nil && p > 1024 && p < 65536 {
+		uiPort = p
 	}
 
 	dataDir := defaultDataDir()
@@ -244,6 +250,108 @@ func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan str
 		openFolder(dir)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+
+	// ---- mods / plugins ----
+	mux.HandleFunc("GET /api/mods", func(w http.ResponseWriter, r *http.Request) {
+		list, folder, err := mgr.ListMods()
+		res := map[string]any{"type": cfg.Get().ServerType, "folder": folder, "installed": list}
+		if err != nil {
+			res["error"] = err.Error()
+		}
+		if v, verr := mgr.targetVersion(); verr == nil {
+			res["version"] = v
+		}
+		writeJSON(w, res)
+	})
+	mux.HandleFunc("GET /api/mods/search", func(w http.ResponseWriter, r *http.Request) {
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		hits, total, err := mgr.SearchMods(r.URL.Query().Get("q"), offset)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"hits": hits, "total": total})
+	})
+	mux.HandleFunc("POST /api/mods/install", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ID string `json:"id"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		installed, err := mgr.InstallMod(body.ID)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"installed": installed})
+	})
+	mux.HandleFunc("POST /api/mods/remove", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			File string `json:"file"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		if err := mgr.RemoveMod(body.File); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/mods/update", func(w http.ResponseWriter, r *http.Request) {
+		updated, problems := mgr.UpdateMods()
+		writeJSON(w, map[string]any{"updated": updated, "problems": problems})
+	})
+
+	// ---- worlds ----
+	mux.HandleFunc("GET /api/worlds", func(w http.ResponseWriter, r *http.Request) {
+		c := cfg.Get()
+		writeJSON(w, map[string]any{
+			"current":      mgr.CurrentWorld(),
+			"singleplayer": SingleplayerWorlds(),
+			"backups":      mgr.ListBackups(),
+			"seed":         c.WorldSeed,
+			"worldType":    c.WorldType,
+		})
+	})
+	worldAction := func(f func(r *http.Request) error) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if err := f(r); err != nil {
+				writeErr(w, err)
+				return
+			}
+			writeJSON(w, map[string]bool{"ok": true})
+		}
+	}
+	mux.HandleFunc("POST /api/worlds/import", worldAction(func(r *http.Request) error {
+		var body struct {
+			Path string `json:"path"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		return mgr.ImportWorld(body.Path)
+	}))
+	mux.HandleFunc("POST /api/worlds/upload", worldAction(func(r *http.Request) error {
+		return mgr.ImportWorldZip(r.Body)
+	}))
+	mux.HandleFunc("POST /api/worlds/new", worldAction(func(r *http.Request) error {
+		var body struct {
+			Seed string `json:"seed"`
+			Type string `json:"type"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		return mgr.NewWorld(body.Seed, body.Type)
+	}))
+	mux.HandleFunc("POST /api/backups/restore", worldAction(func(r *http.Request) error {
+		var body struct {
+			Name string `json:"name"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		return mgr.RestoreBackup(body.Name)
+	}))
+	mux.HandleFunc("POST /api/backups/delete", worldAction(func(r *http.Request) error {
+		var body struct {
+			Name string `json:"name"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		return mgr.DeleteBackup(body.Name)
+	}))
 
 	mux.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})

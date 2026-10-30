@@ -10,7 +10,7 @@ import (
 // Config is everything the user can change. Defaults are chosen so that
 // pressing "Start" without touching anything gives a working server.
 type Config struct {
-	ServerType   string `json:"serverType"`   // "paper" or "vanilla"
+	ServerType   string `json:"serverType"`   // "paper", "vanilla" or "fabric"
 	Version      string `json:"version"`      // "latest" or a concrete version id
 	MemoryMB     int    `json:"memoryMB"`     // 0 = automatic
 	Port         int    `json:"port"`         // default 25565
@@ -23,6 +23,8 @@ type Config struct {
 	Whitelist    bool   `json:"whitelist"`    // only whitelisted players can join
 	UPnP         bool   `json:"upnp"`         // try to open the port on the router
 	EulaAccepted bool   `json:"eulaAccepted"` // set only by the user ticking the box
+	WorldSeed    string `json:"worldSeed"`    // used only when a new world is generated
+	WorldType    string `json:"worldType"`    // normal, flat, large_biomes, amplified
 }
 
 func defaultConfig() Config {
@@ -57,7 +59,7 @@ func loadConfig(dir string) *ConfigStore {
 
 func (c *Config) sanitize() {
 	d := defaultConfig()
-	if c.ServerType != "paper" && c.ServerType != "vanilla" {
+	if c.ServerType != "paper" && c.ServerType != "vanilla" && c.ServerType != "fabric" {
 		c.ServerType = d.ServerType
 	}
 	if c.Version == "" {
@@ -76,6 +78,11 @@ func (c *Config) sanitize() {
 	case "survival", "creative", "adventure", "spectator":
 	default:
 		c.Gamemode = d.Gamemode
+	}
+	switch c.WorldType {
+	case "normal", "flat", "large_biomes", "amplified":
+	default:
+		c.WorldType = "normal"
 	}
 	switch c.Difficulty {
 	case "peaceful", "easy", "normal", "hard":

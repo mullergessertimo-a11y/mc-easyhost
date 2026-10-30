@@ -41,7 +41,13 @@ Then browse to http://127.0.0.1:47615. To start it on boot, use the included `mc
 
 ## What it does for you
 
-- Picks the newest Minecraft version (or one you choose), **Paper** (faster, plugins) or **Vanilla**
+- Picks the newest Minecraft version (or one you choose): **Paper** (faster, plugins), **Fabric** (mods) or **Vanilla**
+- **Mods and plugins** from [Modrinth](https://modrinth.com): search, one-click install with required dependencies
+  (e.g. Fabric API), remove, and "Update all" after changing the Minecraft version. Mods that players need too
+  are marked. Simple Voice Chat's UDP port is opened in the firewall and on the router automatically.
+- **Worlds:** start a new world from a seed (normal, large biomes, amplified, superflat), use a singleplayer world
+  found in the Minecraft Launcher, Prism, Modrinth App or CurseForge, or upload one as a zip. Backups can be
+  restored, and every replace backs up the current world first.
 - Downloads the right **Java** version privately (Temurin from Adoptium), so nothing gets installed system-wide
 - Downloads the server jar and checks its SHA checksum
 - Asks once for the Minecraft EULA, then writes `eula.txt` and `server.properties`
@@ -76,6 +82,8 @@ in a chromeless browser window (`--app`). The local API only accepts requests wi
 | `java.go` | Downloads Temurin JRE matching the version's required Java |
 | `network.go` | LAN/public IP, UPnP port mapping and router error hints |
 | `slp.go` | Minecraft status ping for the live player count |
+| `mods.go` | Modrinth search/install/remove, dependency resolution, voice chat port |
+| `worlds.go`, `nbt.go` | Seeds, singleplayer import, zip upload, backups; level.dat reader |
 | `platform_windows.go` | Job object, hidden console, Edge window, Windows Firewall, RAM |
 | `platform_other.go` | Linux/macOS: data folder, browser window, RAM |
 | `firewall_linux.go` | ufw / firewalld via pkexec |
@@ -96,7 +104,8 @@ go test ./...
 EASYHOST_ONLINE=1 go test -run Online -v ./...
 ```
 
-For development: `EASYHOST_NO_WINDOW=1 EASYHOST_DATA=/tmp/eh go run .`, then open http://127.0.0.1:47615.
+For development: `EASYHOST_NO_WINDOW=1 EASYHOST_DATA=/tmp/eh EASYHOST_PORT=47699 go run .`, then open
+http://127.0.0.1:47699. The separate port lets it run next to an installed copy.
 
 Pushing a tag like `v1.2.0` makes GitHub Actions build every package and attach them to a release.
 

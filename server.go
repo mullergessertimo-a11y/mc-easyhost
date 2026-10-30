@@ -49,15 +49,15 @@ type Manager struct {
 	cfg       *ConfigStore
 	hub       *Hub
 
-	mu      sync.Mutex
-	status  Status
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	players map[string]bool
-	pinged  *pingResult // last answer from the server's status ping
-	stopReq bool
-	exited  chan struct{}
-	mapping *portMapping
+	mu       sync.Mutex
+	status   Status
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	players  map[string]bool
+	pinged   *pingResult // last answer from the server's status ping
+	stopReq  bool
+	exited   chan struct{}
+	mappings []*portMapping
 }
 
 func NewManager(dataDir string, cfg *ConfigStore, hub *Hub) *Manager {
@@ -165,7 +165,11 @@ func (m *Manager) run() error {
 	m.update(func(s *Status) { s.Version = build.Version; s.Type = cfg.ServerType })
 
 	// Protect worlds from accidental downgrades, which corrupt them.
-	if prev := lastVersion(recordPath); prev != "" && compareVersions(build.Version, prev) < 0 && worldExists(m.serverDir) {
+	prev := worldVersion(m.serverDir) // what the world itself says
+	if prev == "" {
+		prev = lastVersion(recordPath)
+	}
+	if prev != "" && compareVersions(build.Version, prev) < 0 && worldExists(m.serverDir) {
 		return fmt.Errorf("your world was last played on %s; starting it on older %s could break it. Pick %s or newer, or make a backup and delete the world first", prev, build.Version, prev)
 	}
 
@@ -192,7 +196,7 @@ func (m *Manager) run() error {
 		[]byte("# Accepted by the user in MC EasyHost (https://aka.ms/MinecraftEULA)\neula=true\n"), 0o644); err != nil {
 		return err
 	}
-	if err := writeServerProperties(filepath.Join(m.serverDir, "server.properties"), cfg); err != nil {
+	if err := writeServerProperties(filepath.Join(m.serverDir, "server.properties"), cfg, build.Version); err != nil {
 		return err
 	}
 
@@ -203,10 +207,11 @@ func (m *Manager) run() error {
 	m.update(func(s *Status) { s.MemoryMB = mem })
 
 	// Networking is best effort and must not delay the start.
-	go m.setupNetwork(cfg.Port, cfg.UPnP, java)
+	m.warnModVersions(cfg.ServerType, build.Version)
+	go m.setupNetwork(cfg.Port, m.extraUDPPorts(cfg.ServerType, cfg.Port), cfg.UPnP, java)
 
 	args := []string{fmt.Sprintf("-Xms%dM", mem), fmt.Sprintf("-Xmx%dM", mem)}
-	if cfg.ServerType == "paper" && build.JavaMajor >= 17 {
+	if cfg.ServerType != "vanilla" && build.JavaMajor >= 17 {
 		args = append(args, aikarFlags(mem)...)
 	}
 	// stdout.encoding matters on Windows: without it Java writes the console
@@ -375,12 +380,12 @@ func (m *Manager) onExit(err error) {
 	m.cmd, m.stdin = nil, nil
 	m.players = map[string]bool{}
 	m.pinged = nil
-	mapping := m.mapping
-	m.mapping = nil
+	mappings := m.mappings
+	m.mappings = nil
 	m.mu.Unlock()
 
-	if mapping != nil {
-		mapping.Remove()
+	for _, pm := range mappings {
+		pm.Remove()
 	}
 	if requested || err == nil {
 		m.log("[EasyHost] Server stopped.")
@@ -453,11 +458,13 @@ func (m *Manager) Command(c string) error {
 	return err
 }
 
-func (m *Manager) setupNetwork(port int, upnp bool, java string) {
+// setupNetwork opens the Minecraft TCP port, plus UDP ports that mods need
+// (voice chat), in the firewall and on the router.
+func (m *Manager) setupNetwork(port int, udp []int, upnp bool, java string) {
 	info := NetInfo{LanIP: lanIP(), Port: port}
 	m.update(func(s *Status) { s.Net = info })
 
-	if msg := ensureFirewall(m.dataDir, java, port); msg != "" {
+	if msg := ensureFirewall(m.dataDir, java, port, udp); msg != "" {
 		m.log("[EasyHost] " + msg)
 	}
 
@@ -468,24 +475,25 @@ func (m *Manager) setupNetwork(port int, upnp bool, java string) {
 	info.PublicIP = publicIP()
 	if upnp {
 		m.update(func(s *Status) { s.Net = info; s.Net.UPnP = "trying" })
-		pm, ext, err := addPortMapping(port, info.LanIP)
+		pm, ext, err := addPortMapping(port, "TCP", info.LanIP)
 		if err != nil {
 			info.UPnP = "failed"
 			m.log("[EasyHost] Could not open the port on your router automatically: " + err.Error() + ". Friends on your Wi-Fi can still join; for friends elsewhere see Help.")
 		} else {
 			info.UPnP = "ok"
 			info.RouterIP = ext
-			m.mu.Lock()
-			if m.cmd != nil {
-				m.mapping = pm
-				pm = nil
-			}
-			m.mu.Unlock()
-			if pm != nil { // server already gone again
-				pm.Remove()
-				return
+			if !m.keepMapping(pm) {
+				return // server already gone again
 			}
 			m.log(fmt.Sprintf("[EasyHost] Opened port %d on your router.", port))
+			for _, u := range udp {
+				upm, _, err := addPortMapping(u, "UDP", info.LanIP)
+				if err != nil {
+					m.log(fmt.Sprintf("[EasyHost] Could not open voice chat port %d (UDP) on your router: %v. Voice chat only works for friends on your Wi-Fi until it is forwarded.", u, err))
+				} else if m.keepMapping(upm) {
+					m.log(fmt.Sprintf("[EasyHost] Opened voice chat port %d (UDP) on your router.", u))
+				}
+			}
 			if ext != "" && info.PublicIP != "" && ext != info.PublicIP {
 				info.CGNAT = true
 				m.log("[EasyHost] Your internet provider shares one public IP between many customers (CGNAT), so friends outside your home cannot connect directly. A free tunnel like playit.gg solves this.")
@@ -501,11 +509,24 @@ func (m *Manager) setupNetwork(port int, upnp bool, java string) {
 	})
 }
 
+// keepMapping stores a router mapping for removal on stop, or removes it
+// right away when the server has already exited.
+func (m *Manager) keepMapping(pm *portMapping) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cmd == nil {
+		pm.Remove()
+		return false
+	}
+	m.mappings = append(m.mappings, pm)
+	return true
+}
+
 func (m *Manager) cleanupOldJars(keep string) {
 	entries, _ := os.ReadDir(m.serverDir)
 	for _, e := range entries {
 		n := e.Name()
-		if n != keep && strings.HasSuffix(n, ".jar") && (strings.HasPrefix(n, "paper-") || strings.HasPrefix(n, "server-")) {
+		if n != keep && strings.HasSuffix(n, ".jar") && (strings.HasPrefix(n, "paper-") || strings.HasPrefix(n, "server-") || strings.HasPrefix(n, "fabric-server-")) {
 			os.Remove(filepath.Join(m.serverDir, n))
 		}
 	}
@@ -602,8 +623,11 @@ func compareVersions(a, b string) int {
 }
 
 func typeLabel(t string) string {
-	if t == "paper" {
+	switch t {
+	case "paper":
 		return "Paper"
+	case "fabric":
+		return "Fabric"
 	}
 	return "Minecraft"
 }

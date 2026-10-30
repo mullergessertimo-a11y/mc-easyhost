@@ -11,35 +11,55 @@ import (
 	"strings"
 )
 
-// ensureFirewall opens the server port in ufw or firewalld when one of them
-// is switched on. Most desktop distros ship with neither active, in which
-// case there is nothing to do. Changing the firewall needs root, so the
-// desktop shows one password prompt through pkexec.
-func ensureFirewall(dataDir, javaPath string, port int) string {
+// ensureFirewall opens the server port (TCP) and mod ports (UDP, e.g. voice
+// chat) in ufw or firewalld when one of them is switched on. Most desktop
+// distros ship with neither active, in which case there is nothing to do.
+// Changing the firewall needs root, so the desktop shows one password
+// prompt through pkexec for all missing ports together.
+func ensureFirewall(dataDir, javaPath string, port int, udp []int) string {
+	specs := []string{fmt.Sprintf("%d/tcp", port)}
+	for _, u := range udp {
+		specs = append(specs, fmt.Sprintf("%d/udp", u))
+	}
 	switch {
 	case ufwEnabled():
 		// ufw rules can't be read without root, so remember what we added.
-		marker := filepath.Join(dataDir, fmt.Sprintf("ufw-%d.done", port))
-		if _, err := os.Stat(marker); err == nil {
+		marker := func(spec string) string {
+			return filepath.Join(dataDir, "ufw-"+strings.ReplaceAll(spec, "/", "-")+".done")
+		}
+		var missing, cmds []string
+		for _, spec := range specs {
+			if _, err := os.Stat(marker(spec)); err != nil {
+				missing = append(missing, spec)
+				cmds = append(cmds, "ufw allow "+spec+" comment 'MC EasyHost'")
+			}
+		}
+		if len(missing) == 0 {
 			return ""
 		}
-		manual := fmt.Sprintf("sudo ufw allow %d/tcp", port)
-		if err := runAsRoot("ufw", "allow", fmt.Sprintf("%d/tcp", port), "comment", "MC EasyHost"); err != nil {
-			return "The ufw firewall was not changed (" + err.Error() + "). If friends cannot connect, run: " + manual
+		if err := runAsRoot("sh", "-c", strings.Join(cmds, " && ")); err != nil {
+			return "The ufw firewall was not changed (" + err.Error() + "). If friends cannot connect, run: sudo " + strings.Join(cmds, " && sudo ")
 		}
-		os.WriteFile(marker, nil, 0o644)
-		return fmt.Sprintf("Allowed port %d through the ufw firewall.", port)
+		for _, spec := range missing {
+			os.WriteFile(marker(spec), nil, 0o644)
+		}
+		return "Allowed " + strings.Join(missing, ", ") + " through the ufw firewall."
 
 	case firewalldRunning():
-		p := fmt.Sprintf("%d/tcp", port)
-		if exec.Command("firewall-cmd", "--query-port="+p).Run() == nil {
+		var missing, cmds []string
+		for _, spec := range specs {
+			if exec.Command("firewall-cmd", "--query-port="+spec).Run() != nil {
+				missing = append(missing, spec)
+				cmds = append(cmds, "firewall-cmd --permanent --add-port="+spec, "firewall-cmd --add-port="+spec)
+			}
+		}
+		if len(missing) == 0 {
 			return ""
 		}
-		manual := fmt.Sprintf("sudo firewall-cmd --permanent --add-port=%s && sudo firewall-cmd --reload", p)
-		if err := runAsRoot("sh", "-c", "firewall-cmd --permanent --add-port="+p+" && firewall-cmd --add-port="+p); err != nil {
-			return "firewalld was not changed (" + err.Error() + "). If friends cannot connect, run: " + manual
+		if err := runAsRoot("sh", "-c", strings.Join(cmds, " && ")); err != nil {
+			return "firewalld was not changed (" + err.Error() + "). If friends cannot connect, run: sudo " + strings.Join(cmds, " && sudo ")
 		}
-		return fmt.Sprintf("Allowed port %d through firewalld.", port)
+		return "Allowed " + strings.Join(missing, ", ") + " through firewalld."
 	}
 	return ""
 }

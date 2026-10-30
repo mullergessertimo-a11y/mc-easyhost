@@ -3,14 +3,23 @@ package main
 import (
 	"bufio"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
 
 // writeServerProperties updates only the keys MC EasyHost manages and keeps
 // every other line (including ones the user edited by hand).
-func writeServerProperties(path string, c Config) error {
+// version picks the level-type spelling, which changed in 1.19.
+func writeServerProperties(path string, c Config, version string) error {
+	levelType := "minecraft:" + c.WorldType
+	if version != "" && compareVersions(version, "1.19") < 0 {
+		levelType = map[string]string{"normal": "default", "flat": "flat", "large_biomes": "largeBiomes", "amplified": "amplified"}[c.WorldType]
+	}
 	managed := map[string]string{
+		"level-name":        "world",
+		"level-seed":        escapeProp(c.WorldSeed),
+		"level-type":        levelType,
 		"server-port":       strconv.Itoa(c.Port),
 		"query.port":        strconv.Itoa(c.Port),
 		"max-players":       strconv.Itoa(c.MaxPlayers),
@@ -40,7 +49,12 @@ func writeServerProperties(path string, c Config) error {
 		}
 		f.Close()
 	}
-	for _, k := range []string{"server-port", "query.port", "max-players", "gamemode", "difficulty", "motd", "online-mode", "pvp", "white-list", "enforce-whitelist"} {
+	keys := make([]string, 0, len(managed))
+	for k := range managed {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
 		if !seen[k] {
 			lines = append(lines, k+"="+managed[k])
 		}

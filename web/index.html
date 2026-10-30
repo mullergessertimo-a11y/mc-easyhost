@@ -112,6 +112,28 @@ input[type=range] { accent-color: var(--green); width: 100%; }
 .lock-note { grid-column: 1 / -1; background: #e0a43a1a; border: 1px solid #e0a43a55; color: var(--amber); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
 
 .help { max-width: 720px; }
+.sec { display: flex; align-items: center; gap: 10px; margin: 24px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+.sec:first-child { margin-top: 0; }
+.sec .sp { flex: 1; }
+.list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 820px; }
+.item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.item img, .item .ph { width: 40px; height: 40px; border-radius: 8px; background: var(--panel2); flex: none; object-fit: cover; }
+.item .txt { flex: 1; min-width: 0; }
+.item .txt b { display: block; font-weight: 600; }
+.item .txt b a { color: inherit; text-decoration: none; }
+.item .txt b a:hover { text-decoration: underline; }
+.item .txt small { display: block; color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--panel2); color: var(--muted); margin-left: 6px; font-weight: 400; vertical-align: 1px; }
+.badge.warn { background: #e0a43a22; color: var(--amber); }
+.badge.ok { background: #5fb83a22; color: var(--green); }
+.infobox { max-width: 820px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; color: #c8ccd1; }
+.infobox.warn { border-color: #e0a43a55; background: #e0a43a12; }
+.infobox .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 13.5px; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.kv code { font-family: var(--mono); }
+.inline-form { display: flex; gap: 8px; flex-wrap: wrap; max-width: 820px; }
+.inline-form input[type=text] { flex: 1; min-width: 180px; }
 .help h4 { margin: 22px 0 6px; font-size: 15px; }
 .help h4:first-child { margin-top: 0; }
 .help p, .help li { color: #c8ccd1; }
@@ -181,6 +203,8 @@ input[type=range] { accent-color: var(--green); width: 100%; }
       <nav class="tabs">
         <button data-tab="console" class="on">Console</button>
         <button data-tab="players">Players <span class="count" id="playerCount">0</span></button>
+        <button data-tab="mods" id="modsTabBtn">Mods</button>
+        <button data-tab="world">World</button>
         <button data-tab="settings">Settings</button>
         <button data-tab="help">Help</button>
       </nav>
@@ -205,6 +229,50 @@ input[type=range] { accent-color: var(--green); width: 100%; }
         </div>
       </div>
 
+      <div class="tab" id="tab-mods">
+        <div id="modsIntro"></div>
+        <div class="sec">Installed <span class="badge" id="modsCount">0</span><span class="sp"></span>
+          <button class="btn small" id="modsUpdate" title="Reinstall every mod for the Minecraft version the server will use">Update all</button></div>
+        <div class="list" id="modsInstalled"></div>
+        <div class="sec">Add more from Modrinth</div>
+        <form class="inline-form" id="modSearchForm" autocomplete="off">
+          <input type="text" id="modQuery" placeholder="Search, e.g. voice chat, essentials, minimap…">
+          <button class="btn">Search</button>
+        </form>
+        <div class="list" id="modsResults" style="margin-top:10px"></div>
+        <button class="btn" id="modsMore" style="margin-top:10px" hidden>Show more</button>
+      </div>
+
+      <div class="tab" id="tab-world">
+        <div class="infobox warn" id="worldLock" hidden>Stop the server to change the world. Backups work any time.</div>
+        <div class="sec">Current world</div>
+        <div class="infobox" id="worldCurrent">Loading…</div>
+
+        <div class="sec">Start a new world</div>
+        <form class="inline-form" id="newWorldForm" autocomplete="off">
+          <input type="text" id="seedInput" maxlength="100" placeholder="Seed (leave empty for a random one)">
+          <select id="worldTypeSel">
+            <option value="normal">Normal</option>
+            <option value="large_biomes">Large biomes</option>
+            <option value="amplified">Amplified</option>
+            <option value="flat">Superflat</option>
+          </select>
+          <button class="btn primary">Create new world</button>
+        </form>
+        <div class="note">The current world is backed up first, so nothing is lost. The new world is generated when you press Start.</div>
+
+        <div class="sec">Use a singleplayer world</div>
+        <div class="list" id="spWorlds"></div>
+        <div class="inline-form" style="margin-top:10px;align-items:center">
+          <label class="btn" style="cursor:pointer">Upload a world (.zip)<input type="file" id="worldZip" accept=".zip" hidden></label>
+          <span class="note" style="margin:0">For a world a friend sent you. Close the world in Minecraft before importing.</span>
+        </div>
+        <div class="note">The world is copied, your singleplayer save stays as it is. Inventories don't carry over: on the server everyone starts with their own.</div>
+
+        <div class="sec">Backups<span class="sp"></span><button class="btn small" id="backupNow">Back up now</button></div>
+        <div class="list" id="backupList"></div>
+      </div>
+
       <div class="tab" id="tab-settings">
         <form class="settings" id="settings">
           <div class="lock-note" id="lockNote" hidden>Changes are saved now and take effect the next time you start the server.</div>
@@ -213,8 +281,9 @@ input[type=range] { accent-color: var(--green); width: 100%; }
             <div class="seg">
               <label><input type="radio" name="serverType" value="paper">Paper <small>(faster)</small></label>
               <label><input type="radio" name="serverType" value="vanilla">Vanilla</label>
+              <label><input type="radio" name="serverType" value="fabric">Fabric <small>(mods)</small></label>
             </div>
-            <small>Paper runs the same game with better performance and supports plugins.</small>
+            <small>Paper: faster, supports plugins (players need nothing extra). Fabric: supports mods (some players need them too).</small>
           </label>
           <label class="field">
             <span>Minecraft version</span>
@@ -272,6 +341,11 @@ input[type=range] { accent-color: var(--green); width: 100%; }
           <li>If EasyHost says your provider uses <b>CGNAT</b>, port forwarding cannot work. A free tunnel such as <b>playit.gg</b> gives you an address that works anyway.</li>
           <li id="fwHelp">The first start asks for permission to add a Windows Firewall rule. Say yes, or friends can't connect.</li>
         </ul>
+        <h4>Mods and plugins</h4>
+        <p>With <b>Paper</b> you add <b>plugins</b>. They run only on the server, so friends join with normal Minecraft. With <b>Fabric</b> you add <b>mods</b>, which can add new things to the game; mods marked "players need it too" must also be installed by everyone, together with Fabric. Install and remove them on the Plugins/Mods tab, then restart the server.</p>
+        <p><b>Simple Voice Chat</b> works on both. Every player needs the voice chat mod in their own Minecraft. EasyHost also opens its voice port (UDP 24454).</p>
+        <h4>Seeds and existing worlds</h4>
+        <p>On the <b>World</b> tab you can start a new world from a seed, play one of your singleplayer worlds with friends, or upload a world someone sent you as a zip. The current world is always backed up first, and you can restore any backup there.</p>
         <h4>Making yourself admin</h4>
         <p>Go to <b>Players</b>, type your name and press <b>Make admin</b>. Then you can use commands like <code>/gamemode creative</code> in game.</p>
         <h4>Where is my world?</h4>
@@ -432,7 +506,10 @@ function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('backlog', e => { logEl.innerHTML = ''; addLines(JSON.parse(e.data)); if (!logEl.childElementCount) logEl.innerHTML = '<div class="empty">The server\'s output will show up here.</div>'; });
   es.addEventListener('log', e => addLines([JSON.parse(e.data)]));
-  es.addEventListener('status', e => { status = JSON.parse(e.data); render(); });
+  es.addEventListener('status', e => {
+    const was = stopped(); status = JSON.parse(e.data); render();
+    if (was !== stopped()) { if ($('#tab-world').classList.contains('on')) loadWorlds(); if ($('#tab-mods').classList.contains('on')) loadMods(); }
+  });
 }
 
 // ---------- main button ----------
@@ -455,7 +532,151 @@ $('#eulaOk').addEventListener('click', () => { $('#eula').classList.remove('on')
 $$('nav.tabs button').forEach(b => b.addEventListener('click', () => {
   $$('nav.tabs button').forEach(x => x.classList.toggle('on', x === b));
   $$('.tab').forEach(t => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'mods') loadMods();
+  if (b.dataset.tab === 'world') loadWorlds();
 }));
+const stopped = () => status.state === 'stopped' || status.state === 'error';
+const ago = t => { if (!t) return ''; const d = (Date.now() - t) / 60000; return d < 60 ? Math.max(1, Math.round(d)) + ' min ago' : d < 1440 ? Math.round(d / 60) + ' h ago' : Math.round(d / 1440) + ' days ago'; };
+const mb = n => n >= 1024 ? (n / 1024).toFixed(1) + ' GB' : n + ' MB';
+async function busyBtn(btn, label, fn) {
+  const old = btn.textContent; btn.disabled = true; btn.textContent = label;
+  try { return await fn(); } catch (err) { toast(err.message, true); } finally { btn.disabled = false; btn.textContent = old; }
+}
+
+// ---------- mods ----------
+let modOffset = 0, modTotal = 0, modQuery = '';
+const typeWord = () => config.serverType === 'fabric' ? 'mods' : 'plugins';
+function modItem(m, kind) {
+  const isMod = config.serverType === 'fabric';
+  const badges = [];
+  if (m.dependency) badges.push('<span class="badge">needed by another ' + (isMod ? 'mod' : 'plugin') + '</span>');
+  if (m.unknown) badges.push('<span class="badge">added by hand</span>');
+  if (isMod && m.clientSide === 'required') badges.push('<span class="badge warn">players need it too</span>');
+  else if (m.clientSide === 'optional' && /voice/i.test(m.title)) badges.push('<span class="badge warn">players need it for voice</span>');
+  else if (m.clientSide === 'optional' && isMod) badges.push('<span class="badge">optional for players</span>');
+  const link = m.slug ? `https://modrinth.com/${isMod ? 'mod' : 'plugin'}/${encodeURIComponent(m.slug)}` : '';
+  const title = link ? `<a href="${link}" target="_blank" rel="noopener">${esc(m.title)}</a>` : esc(m.title);
+  const sub = kind === 'installed' ? (m.unknown ? m.file : `${esc(m.version || '')}${m.gameVersion ? ' · for ' + esc(m.gameVersion) : ''}`) : esc(m.description || '');
+  const icon = m.icon ? `<img src="${esc(m.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>';
+  const btn = kind === 'installed'
+    ? `<button class="btn small" data-remove="${esc(m.file)}" ${stopped() ? '' : 'disabled title="Stop the server first"'}>Remove</button>`
+    : m.installed ? '<span class="badge ok">installed</span>' : `<button class="btn small primary" data-install="${esc(m.id)}">Install</button>`;
+  return `<div class="item">${icon}<div class="txt"><b>${title}${badges.join('')}</b><small>${sub}</small></div>${btn}</div>`;
+}
+async function loadMods() {
+  $('#modsTabBtn').firstChild.textContent = config.serverType === 'paper' ? 'Plugins' : 'Mods';
+  const d = await call('mods').catch(err => ({ error: err.message }));
+  const intro = $('#modsIntro');
+  const vanilla = config.serverType === 'vanilla';
+  $$('#tab-mods .sec, #modSearchForm, #modsInstalled, #modsResults').forEach(el => el.hidden = vanilla);
+  $('#modsMore').hidden = true;
+  if (vanilla) {
+    intro.innerHTML = `<div class="infobox">Vanilla Minecraft can't load add-ons. Pick one of these (your world stays the same):
+      <div class="row"><button class="btn primary" data-switch="paper">Use Paper: plugins</button><button class="btn" data-switch="fabric">Use Fabric: mods</button></div>
+      <div class="note"><b>Plugins</b> (Paper) only run on the server, so friends join with normal Minecraft. <b>Mods</b> (Fabric) can add new blocks and items, but then every player needs them too.</div></div>`;
+    return;
+  }
+  intro.innerHTML = config.serverType === 'fabric'
+    ? `<div class="infobox">Fabric ${esc(d.version || '')} server. Mods marked <span class="badge warn">players need it too</span> must also be installed by everyone who joins, together with <a href="https://fabricmc.net/use/installer/" target="_blank" rel="noopener" style="color:var(--blue)">Fabric</a>. The others work with a normal Minecraft client.</div>`
+    : `<div class="infobox">Paper ${esc(d.version || '')} server. Plugins run only on the server, so friends join with normal Minecraft. Simple Voice Chat is the exception: players need its mod to talk.</div>`;
+  const list = d.installed || [];
+  $('#modsCount').textContent = list.length;
+  $('#modsInstalled').innerHTML = list.length ? list.map(m => modItem(m, 'installed')).join('') : `<div class="empty-state" style="padding:10px 0">No ${typeWord()} yet. Search below.</div>`;
+  $('#modsUpdate').disabled = !stopped() || !list.some(m => !m.unknown);
+  if (!$('#modsResults').childElementCount) searchMods('', false);
+}
+async function searchMods(q, more) {
+  modQuery = q; modOffset = more ? modOffset + 20 : 0;
+  try {
+    const d = await call('mods/search?q=' + encodeURIComponent(q) + '&offset=' + modOffset);
+    modTotal = d.total;
+    const html = d.hits.map(m => modItem(m, 'search')).join('');
+    if (more) $('#modsResults').insertAdjacentHTML('beforeend', html);
+    else $('#modsResults').innerHTML = html || '<div class="empty-state" style="padding:10px 0">Nothing found for this Minecraft version.</div>';
+    $('#modsMore').hidden = modOffset + 20 >= modTotal;
+  } catch (err) { $('#modsResults').innerHTML = `<div class="empty-state" style="padding:10px 0">${esc(err.message)}</div>`; }
+}
+$('#modSearchForm').addEventListener('submit', e => { e.preventDefault(); searchMods($('#modQuery').value.trim(), false); });
+$('#modsMore').addEventListener('click', () => searchMods(modQuery, true));
+$('#tab-mods').addEventListener('click', async e => {
+  const inst = e.target.closest('[data-install]'), rem = e.target.closest('[data-remove]'), sw = e.target.closest('[data-switch]');
+  if (inst) await busyBtn(inst, 'Installing…', async () => {
+    const d = await call('mods/install', { id: inst.dataset.install });
+    toast('Installed ' + d.installed.join(', ') + (status.state === 'running' ? '. Restart the server to load it.' : ''));
+    inst.outerHTML = '<span class="badge ok">installed</span>';
+    loadMods();
+  });
+  if (rem) await busyBtn(rem, 'Removing…', async () => { await call('mods/remove', { file: rem.dataset.remove }); loadMods(); });
+  if (sw) { config = await call('config', { ...config, serverType: sw.dataset.switch }); fillForm(); loadVersions(config.serverType); $('#modsResults').innerHTML = ''; loadMods(); }
+});
+$('#modsUpdate').addEventListener('click', e => busyBtn(e.target, 'Updating…', async () => {
+  const d = await call('mods/update', {});
+  toast(d.problems.length ? 'Some could not be updated: ' + d.problems.join('; ') : `All ${typeWord()} are up to date.`, d.problems.length > 0);
+  loadMods();
+}));
+
+// ---------- worlds ----------
+async function loadWorlds() {
+  let d;
+  try { d = await call('worlds'); } catch (err) { $('#worldCurrent').textContent = err.message; return; }
+  const lock = !stopped();
+  $('#worldLock').hidden = !lock;
+  $$('#newWorldForm button, #worldZip').forEach(el => el.disabled = lock);
+  const w = d.current;
+  $('#worldCurrent').innerHTML = w ? `<div class="kv">
+      <span>Name</span><span>${esc(w.name)}${w.hardcore ? ' <span class="badge warn">hardcore</span>' : ''}</span>
+      <span>Version</span><span>${esc(w.version || 'unknown')}</span>
+      <span>Seed</span><span>${w.seed ? `<code>${esc(w.seed)}</code> <button class="copy" data-copyseed="${esc(w.seed)}">Copy</button>` : 'unknown'}</span>
+      <span>Size</span><span>${mb(w.sizeMB)}</span>
+      ${w.lastPlayed ? `<span>Last saved</span><span>${ago(w.lastPlayed)}</span>` : ''}</div>`
+    : `No world yet. ${d.seed ? `A new ${esc(d.worldType.replace('_', ' '))} world with seed <code>${esc(d.seed)}</code>` : 'A new world'} is created when you press Start.`;
+  $('#seedInput').value = ''; $('#worldTypeSel').value = d.worldType || 'normal';
+
+  const sp = d.singleplayer || [];
+  $('#spWorlds').innerHTML = sp.length ? sp.map(s => `<div class="item"><div class="ph"></div>
+      <div class="txt"><b>${esc(s.name)}<span class="badge">${esc(s.version || '?')}</span>${s.hardcore ? '<span class="badge warn">hardcore</span>' : ''}</b>
+      <small>${esc(s.source)} · ${esc(s.folder)}${s.lastPlayed ? ' · played ' + ago(s.lastPlayed) : ''}</small></div>
+      <button class="btn small" data-import="${esc(s.path)}" ${lock ? 'disabled' : ''}>Use this world</button></div>`).join('')
+    : '<div class="empty-state" style="padding:10px 0">No singleplayer worlds found on this PC (checked the Minecraft Launcher, Prism, Modrinth App and CurseForge).</div>';
+
+  const bk = d.backups || [];
+  $('#backupList').innerHTML = bk.length ? bk.map(b => `<div class="item">
+      <div class="txt"><b>${new Date(b.created).toLocaleString()}</b><small>${esc(b.name)} · ${mb(b.sizeMB)}</small></div>
+      <button class="btn small" data-restore="${esc(b.name)}" ${lock ? 'disabled' : ''}>Restore</button>
+      <button class="btn small" data-delbackup="${esc(b.name)}">Delete</button></div>`).join('')
+    : '<div class="empty-state" style="padding:10px 0">No backups yet.</div>';
+}
+$('#newWorldForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const seed = $('#seedInput').value.trim(), type = $('#worldTypeSel').value;
+  if (!confirm('Replace the current world with a new one? The current world is backed up first.')) return;
+  busyBtn($('#newWorldForm button'), 'Preparing…', async () => {
+    await call('worlds/new', { seed, type }); config.worldSeed = seed; config.worldType = type;
+    toast('New world is ready. Press Start to generate it.'); loadWorlds();
+  });
+});
+$('#tab-world').addEventListener('click', async e => {
+  const imp = e.target.closest('[data-import]'), res = e.target.closest('[data-restore]'), del = e.target.closest('[data-delbackup]'), cs = e.target.closest('[data-copyseed]');
+  if (cs) navigator.clipboard.writeText(cs.dataset.copyseed).then(() => toast('Seed copied'));
+  if (imp && confirm('Use this world on the server? The current server world is backed up first.'))
+    await busyBtn(imp, 'Copying…', async () => { await call('worlds/import', { path: imp.dataset.import }); toast('World imported. Press Start to play it.'); loadWorlds(); });
+  if (res && confirm('Restore this backup? The current world is backed up first.'))
+    await busyBtn(res, 'Restoring…', async () => { await call('backups/restore', { name: res.dataset.restore }); toast('Backup restored'); loadWorlds(); });
+  if (del && confirm('Delete this backup for good?'))
+    await busyBtn(del, 'Deleting…', async () => { await call('backups/delete', { name: del.dataset.delbackup }); loadWorlds(); });
+});
+$('#worldZip').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file || !confirm(`Import "${file.name}"? The current server world is backed up first.`)) return;
+  toast('Uploading and importing ' + file.name + '…');
+  try {
+    const r = await fetch('/api/worlds/upload', { method: 'POST', headers: { 'X-EasyHost': '1' }, body: file });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    toast('World imported. Press Start to play it.'); loadWorlds();
+  } catch (err) { toast(err.message, true); }
+});
+$('#backupNow').addEventListener('click', e => busyBtn(e.target, 'Backing up…', async () => { await call('backup', {}); toast('World backed up'); loadWorlds(); }));
 $$('[data-copy]').forEach(b => b.addEventListener('click', () => {
   const t = $('#' + b.dataset.copy).textContent;
   if (t === '–') return;
@@ -528,7 +749,10 @@ form.addEventListener('submit', async e => {
   }
   if (c.whitelist && !config.whitelist) toast('Remember to add yourself and your friends on the Players tab.');
   try {
+    const typeChanged = c.serverType !== config.serverType || c.version !== config.version;
     config = await call('config', c); fillForm();
+    if (typeChanged) $('#modsResults').innerHTML = '';
+    $('#modsTabBtn').firstChild.textContent = config.serverType === 'paper' ? 'Plugins' : 'Mods';
     $('#saveNote').textContent = 'Saved ✓'; setTimeout(() => $('#saveNote').textContent = '', 2500);
   } catch (err) { toast(err.message, true); }
 });
@@ -542,6 +766,7 @@ form.addEventListener('submit', async e => {
   else if (info.os === 'darwin') $('#fwHelp').textContent = "If macOS asks whether Java may accept incoming connections, click Allow.";
   $('#memRange').max = Math.max(4096, Math.floor(info.totalMB * 0.8 / 512) * 512);
   fillForm(); render(); connect();
+  $('#modsTabBtn').firstChild.textContent = config.serverType === 'paper' ? 'Plugins' : 'Mods';
   loadVersions(config.serverType);
 })();
 </script>
