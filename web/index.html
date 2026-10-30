@@ -329,7 +329,8 @@ function render() {
   const s = status, st = s.state;
   const pill = $('#pill');
   pill.className = 'pill ' + (st === 'running' ? 'running' : busy(st) ? 'busy' : st === 'error' ? 'error' : '');
-  $('#pillText').textContent = labels[st] + (st === 'running' && s.players?.length ? ` · ${s.players.length} playing` : '');
+  const count = s.playerCount ?? (s.players || []).length;
+  $('#pillText').textContent = labels[st] + (st === 'running' && count ? ` · ${count} playing` : '');
 
   const btn = $('#mainBtn');
   const live = st === 'running' || st === 'starting';
@@ -373,14 +374,15 @@ function render() {
   $('#lockNote').hidden = st === 'stopped' || st === 'error';
 
   const players = s.players || [];
-  $('#playerCount').textContent = players.length;
-  $('#players').innerHTML = players.length ? players.map(p => `
+  $('#playerCount').textContent = count;
+  const unnamed = Math.max(0, count - players.length);
+  $('#players').innerHTML = count ? players.map(p => `
     <div class="player">
       <img src="https://mc-heads.net/avatar/${encodeURIComponent(p)}/32" alt="" onerror="this.style.visibility='hidden'">
       <b>${esc(p)}</b>
       <button class="btn small" data-cmd="op ${esc(p)}">Make admin</button>
       <button class="btn small" data-cmd="kick ${esc(p)}">Kick</button>
-    </div>`).join('') : `<div class="empty-state">${st === 'running' ? 'Nobody is online yet.' : 'Start the server to see who is playing.'}</div>`;
+    </div>`).join('') + (unnamed ? `<div class="empty-state" style="padding:8px 0">+ ${unnamed} more player${unnamed > 1 ? 's' : ''} (the server didn't share ${players.length ? 'their' : 'the'} names)</div>` : '') : `<div class="empty-state">${st === 'running' ? 'Nobody is online yet.' : 'Start the server to see who is playing.'}</div>`;
 }
 
 function uptime(t) {

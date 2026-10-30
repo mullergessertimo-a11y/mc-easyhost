@@ -14,14 +14,20 @@ Grab the file for your system from the [Releases](../../releases) page:
 
 ### Linux install
 
-```bash
-tar xzf mc-easyhost-linux-x86_64.tar.gz
-cd mc-easyhost-linux-x86_64 && ./install.sh
-```
+1. Download `mc-easyhost-linux-x86_64.tar.gz` from the [Releases](../../releases) page. While this repository is
+   private, that only works in a browser where you are signed in to GitHub. The file lands in `~/Downloads`.
+2. Open a terminal and run:
+
+   ```bash
+   cd ~/Downloads && tar xzf mc-easyhost-linux-x86_64.tar.gz && ./mc-easyhost-linux-x86_64/install.sh
+   ```
 
 This puts `mc-easyhost` in `~/.local/bin` and adds **MC EasyHost** to your app menu. No root is needed, and
-`./install.sh --uninstall` removes it again. You can also run `./mc-easyhost` straight from the folder without
-installing.
+`./mc-easyhost-linux-x86_64/install.sh --uninstall` removes it again. You can also run `./mc-easyhost` straight
+from the unpacked folder without installing.
+
+If `tar` says *Cannot open: No such file or directory*, the file isn't in the folder you're in. Check where your
+browser saved it (`ls ~/Downloads`), and note that a second download may be named `…(1).tar.gz`.
 
 **Headless servers** (no desktop): run `mc-easyhost --headless`. It keeps running until stopped and prints the
 console to stdout. Open the control panel through an SSH tunnel:
@@ -44,7 +50,8 @@ Then browse to http://127.0.0.1:47615. To start it on boot, use the included `mc
   (one password prompt). It also opens the port on the router via **UPnP**, explaining what to change when the
   router refuses.
 - Shows the LAN and internet addresses to share, and warns when the provider uses CGNAT
-- Live console, command input, player list (op/kick), whitelist, world backups (zip)
+- Live console, command input, player list (op/kick), whitelist, world backups (zip). The player count
+  comes from the server itself (the same status ping the Minecraft server list uses), so it is always right.
 - Refuses to start a world on an older version than it was last played on, since that would corrupt it
 - Closing the window saves the world and stops the server, and Java never outlives the app. On Windows a job
   object handles this; on Linux the parent-death signal does.
@@ -68,6 +75,7 @@ in a chromeless browser window (`--app`). The local API only accepts requests wi
 | `versions.go` | Mojang version manifest + PaperMC Fill v3 API |
 | `java.go` | Downloads Temurin JRE matching the version's required Java |
 | `network.go` | LAN/public IP, UPnP port mapping and router error hints |
+| `slp.go` | Minecraft status ping for the live player count |
 | `platform_windows.go` | Job object, hidden console, Edge window, Windows Firewall, RAM |
 | `platform_other.go` | Linux/macOS: data folder, browser window, RAM |
 | `firewall_linux.go` | ufw / firewalld via pkexec |

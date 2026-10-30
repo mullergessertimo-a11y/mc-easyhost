@@ -36,7 +36,9 @@ type Status struct {
 	Version  string   `json:"version"`
 	Type     string   `json:"type"`
 	MemoryMB int      `json:"memoryMB"`
-	Players  []string `json:"players"`
+	Players  []string `json:"players"`     // names we know of
+	Count    int      `json:"playerCount"` // how many are online (from the server itself when possible)
+	Max      int      `json:"maxPlayers"`
 	Started  int64    `json:"started"` // unix ms when it became running
 	Net      NetInfo  `json:"net"`
 }
@@ -52,6 +54,7 @@ type Manager struct {
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	players map[string]bool
+	pinged  *pingResult // last answer from the server's status ping
 	stopReq bool
 	exited  chan struct{}
 	mapping *portMapping
@@ -83,6 +86,10 @@ func (m *Manager) snapshotLocked() Status {
 		s.Players = append(s.Players, p)
 	}
 	sort.Strings(s.Players)
+	s.Count = len(s.Players)
+	if m.pinged != nil {
+		s.Count, s.Max = m.pinged.Online, m.pinged.Max
+	}
 	return s
 }
 
@@ -116,6 +123,7 @@ func (m *Manager) Start() error {
 	}
 	m.status = Status{State: StatePreparing, Step: "Getting ready", Progress: -1, Net: m.status.Net}
 	m.players = map[string]bool{}
+	m.pinged = nil
 	m.stopReq = false
 	m.mu.Unlock()
 	m.hub.SendStatus(m.Status())
@@ -201,7 +209,10 @@ func (m *Manager) run() error {
 	if cfg.ServerType == "paper" && build.JavaMajor >= 17 {
 		args = append(args, aikarFlags(mem)...)
 	}
-	args = append(args, "-Dfile.encoding=UTF-8", "-jar", build.JarName, "nogui")
+	// stdout.encoding matters on Windows: without it Java writes the console
+	// in the old ANSI code page and names/colors come out garbled.
+	args = append(args, "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8",
+		"-jar", build.JarName, "nogui")
 
 	m.step("Starting the server", -1)
 	m.log(fmt.Sprintf("[EasyHost] Starting %s %s with %d MB RAM (Java %d)", typeLabel(cfg.ServerType), build.Version, mem, build.JavaMajor))
@@ -228,6 +239,7 @@ func (m *Manager) run() error {
 	m.hub.SendStatus(m.Status())
 
 	go m.readOutput(pr)
+	go m.watchPlayers(cfg.Port, exited)
 	go func() {
 		err := cmd.Wait()
 		pw.Close()
@@ -238,20 +250,42 @@ func (m *Manager) run() error {
 }
 
 var (
-	reDone  = regexp.MustCompile(`\]: Done \(`)
-	reJoin  = regexp.MustCompile(`\]: ([A-Za-z0-9_.]{2,16}) joined the game`)
-	reLeave = regexp.MustCompile(`\]: ([A-Za-z0-9_.]{2,16}) left the game`)
+	reDone = regexp.MustCompile(`\]: Done \(`)
+	// Player lines are matched anywhere in the line: depending on version,
+	// platform and log setup there can be color codes, a [Server thread/INFO]
+	// prefix or nothing at all in front of the name.
+	reName  = regexp.MustCompile(`^[A-Za-z0-9_.]{2,16}$`)
+	reJoin  = regexp.MustCompile(`(?:^|\s)([A-Za-z0-9_.]{2,16})(?: \(formerly known as [^)]*\))? joined the game`)
+	reLogin = regexp.MustCompile(`(?:^|\s)([A-Za-z0-9_.]{2,16})\[/[^\]]*\] logged in with entity id`)
+	reLeave = regexp.MustCompile(`(?:^|\s)([A-Za-z0-9_.]{2,16}) (?:left the game|lost connection:)`)
 	rePort  = regexp.MustCompile(`(?i)FAILED TO BIND TO PORT|Address already in use`)
+	reChat  = regexp.MustCompile(`(?:^|\]: )(?:\[Not Secure\] )?<[^>]+> `)
 )
+
+// parsePlayerLine reports a player joining (+1) or leaving (-1).
+func parsePlayerLine(line string) (name string, delta int) {
+	if reChat.MatchString(line) {
+		return "", 0 // someone typing "Bob joined the game" in chat
+	}
+	if m := reLogin.FindStringSubmatch(line); m != nil {
+		return m[1], 1
+	}
+	if m := reJoin.FindStringSubmatch(line); m != nil {
+		return m[1], 1
+	}
+	if m := reLeave.FindStringSubmatch(line); m != nil {
+		return m[1], -1
+	}
+	return "", 0
+}
 
 func (m *Manager) readOutput(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
-		line := stripANSI(sc.Text())
+		line := cleanLine(sc.Text())
 		m.log(line)
-		switch {
-		case reDone.MatchString(line):
+		if reDone.MatchString(line) {
 			m.update(func(s *Status) {
 				if s.State == StateStarting {
 					s.State = StateRunning
@@ -259,28 +293,80 @@ func (m *Manager) readOutput(r io.Reader) {
 					s.Started = time.Now().UnixMilli()
 				}
 			})
-		case reJoin.MatchString(line):
-			name := reJoin.FindStringSubmatch(line)[1]
+			continue
+		}
+		if rePort.MatchString(line) {
+			m.log("[EasyHost] The port is already used by another program (maybe another Minecraft server is running). Close it or change the port in Settings.")
+			continue
+		}
+		if name, delta := parsePlayerLine(line); delta != 0 {
 			m.mu.Lock()
-			m.players[name] = true
+			if delta > 0 {
+				m.players[name] = true
+			} else {
+				delete(m.players, name)
+			}
 			m.mu.Unlock()
 			m.hub.SendStatus(m.Status())
-		case reLeave.MatchString(line):
-			name := reLeave.FindStringSubmatch(line)[1]
-			m.mu.Lock()
-			delete(m.players, name)
-			m.mu.Unlock()
-			m.hub.SendStatus(m.Status())
-		case rePort.MatchString(line):
-			m.log(fmt.Sprintf("[EasyHost] The port is already used by another program (maybe another Minecraft server is running). Close it or change the port in Settings."))
 		}
 	}
 	io.Copy(io.Discard, r)
 }
 
-var reANSI = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+// watchPlayers asks the server for its player count every few seconds, the
+// same way the Minecraft server list does, so the number is right even if
+// a log line was missed or looked different.
+func (m *Manager) watchPlayers(port int, exited chan struct{}) {
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-exited:
+			return
+		case <-t.C:
+		}
+		if m.Status().State != StateRunning {
+			continue
+		}
+		res, err := pingServer("127.0.0.1", port, 3*time.Second)
+		if err != nil {
+			continue
+		}
+		m.mu.Lock()
+		before := m.snapshotLocked()
+		m.pinged = res
+		switch {
+		case res.Online == 0:
+			m.players = map[string]bool{}
+		case len(res.Sample) == res.Online:
+			// The server listed everyone, so the names are exact.
+			m.players = map[string]bool{}
+			for _, n := range res.Sample {
+				m.players[n] = true
+			}
+		default:
+			for _, n := range res.Sample {
+				m.players[n] = true
+			}
+		}
+		after := m.snapshotLocked()
+		m.mu.Unlock()
+		if before.Count != after.Count || before.Max != after.Max || strings.Join(before.Players, ",") != strings.Join(after.Players, ",") {
+			m.hub.SendStatus(after)
+		}
+	}
+}
 
-func stripANSI(s string) string { return reANSI.ReplaceAllString(s, "") }
+var (
+	reANSI   = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+	reLegacy = regexp.MustCompile(`(?:\x{00A7}|\x{FFFD})[0-9a-fk-orxA-FK-ORX]`)
+)
+
+// cleanLine removes terminal colors and Minecraft's own § color codes.
+func cleanLine(s string) string {
+	s = reANSI.ReplaceAllString(s, "")
+	return reLegacy.ReplaceAllString(strings.ToValidUTF8(s, "\uFFFD"), "")
+}
 
 func (m *Manager) onExit(err error) {
 	m.mu.Lock()
@@ -288,6 +374,7 @@ func (m *Manager) onExit(err error) {
 	wasRunning := m.status.State == StateRunning
 	m.cmd, m.stdin = nil, nil
 	m.players = map[string]bool{}
+	m.pinged = nil
 	mapping := m.mapping
 	m.mapping = nil
 	m.mu.Unlock()
