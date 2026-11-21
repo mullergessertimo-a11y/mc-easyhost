@@ -168,6 +168,7 @@ type fakePlayit struct {
 	tunnels []map[string]any
 	created []map[string]any
 	auth    []string
+	tooOld  int // answer AgentVersionTooOld this many times first
 }
 
 func (f *fakePlayit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +182,11 @@ func (f *fakePlayit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/agents/rundata":
 		ok(map[string]any{"agent_id": "a-1", "account_status": "ready", "tunnels": f.tunnels, "pending": []any{}})
 	case "/tunnels/create":
+		if f.tooOld > 0 {
+			f.tooOld--
+			json.NewEncoder(w).Encode(map[string]any{"status": "fail", "data": "AgentVersionTooOld"})
+			return
+		}
 		f.created = append(f.created, req)
 		origin := req["origin"].(map[string]any)["data"].(map[string]any)
 		domain, port := "cool-name.gl.joinmc.link", 41234
@@ -198,7 +204,7 @@ func (f *fakePlayit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestEnsureTunnelsWithFakePlayit(t *testing.T) {
-	f := &fakePlayit{}
+	f := &fakePlayit{tooOld: 1} // the agent hasn't reported its version yet
 	srv := httptest.NewServer(f)
 	defer srv.Close()
 	old := playitAPI

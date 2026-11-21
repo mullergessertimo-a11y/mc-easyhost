@@ -27,6 +27,9 @@ import (
 var playitAPI = "https://api.playit.gg" // a var so tests can point it elsewhere
 
 // The agent is pinned to a release we tested, with its published checksums.
+// playit.gg checks agent versions, so the link reports this version too.
+const playitAgentVersion = "2.0.2"
+
 var playitAgents = map[string]struct{ URL, SHA256 string }{
 	"windows/amd64": {"https://github.com/playit-cloud/playit-agent/releases/download/v2.0.2/playitd-windows-x86_64-signed.exe",
 		"6e62da9f56a3bcf72e0c62c29e94609c847cc9b110c460f68b20035525985238"},
@@ -166,7 +169,7 @@ func (m *Manager) waitForClaim(code string, stop chan struct{}) {
 		m.setTunnel(func(t *TunnelInfo) { *t = TunnelInfo{State: "error", Error: msg} })
 	}
 	deadline := time.Now().Add(20 * time.Minute)
-	setup := map[string]string{"code": code, "agent_type": "self-managed", "version": "MC EasyHost " + version}
+	setup := map[string]string{"code": code, "agent_type": "self-managed", "version": "playit " + playitAgentVersion}
 	for {
 		select {
 		case <-stop:
@@ -357,14 +360,30 @@ func ensureTunnels(secret string, port, bedrockPort int, waitFor time.Duration) 
 		var id struct {
 			ID string `json:"id"`
 		}
-		if err := playitCall("/tunnels/create", secret, map[string]any{
+		req := map[string]any{
 			"name": "MC EasyHost " + strings.TrimPrefix(w.typ, "minecraft-"), "tunnel_type": w.typ,
 			"port_type": w.proto, "port_count": 1, "enabled": true,
 			"origin": map[string]any{"type": "agent", "data": map[string]any{
 				"agent_id": rd.AgentID, "local_ip": "127.0.0.1", "local_port": w.port}},
 			"alloc": nil, "firewall_id": nil, "proxy_protocol": nil,
-		}, &id); err != nil {
-			return "", "", err
+		}
+		// playit.gg learns the agent's version when the agent first connects,
+		// a few seconds after it starts. Until then it says the version is
+		// too old, so wait for the agent instead of failing.
+		retryUntil := time.Now().Add(waitFor)
+		for {
+			err := playitCall("/tunnels/create", secret, req, &id)
+			if err == nil {
+				break
+			}
+			var pf *playitFail
+			if !errors.As(err, &pf) || pf.Code != "AgentVersionTooOld" {
+				return "", "", err
+			}
+			if time.Now().After(retryUntil) {
+				return "", "", errors.New("playit.gg hasn't seen the playit agent come online. Check that your firewall or antivirus lets playitd connect to the internet, then press Retry")
+			}
+			time.Sleep(3 * time.Second)
 		}
 	}
 
