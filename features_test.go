@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -169,6 +170,7 @@ type fakePlayit struct {
 	created []map[string]any
 	auth    []string
 	tooOld  int // answer AgentVersionTooOld this many times first
+	configs map[string][]map[string]string
 }
 
 func (f *fakePlayit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +198,26 @@ func (f *fakePlayit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.tunnels = append(f.tunnels, map[string]any{"id": "t" + domain, "tunnel_type": req["tunnel_type"],
 			"local_port": origin["local_port"], "assigned_domain": domain, "port": map[string]int{"from": port, "to": port + 1}})
 		ok(map[string]string{"id": "t1"})
+	case "/v1/agents/rundata":
+		var list []map[string]any
+		for _, t := range f.tunnels {
+			id := t["id"].(string)
+			list = append(list, map[string]any{"id": id, "tunnel_type": t["tunnel_type"],
+				"display_address": fmt.Sprintf("%s:%d", t["assigned_domain"], t["port"].(map[string]int)["from"]),
+				"agent_config":    map[string]any{"fields": f.configs[id]}})
+		}
+		ok(map[string]any{"agent_id": "a-1", "tunnels": list})
+	case "/v1/tunnels/config":
+		if f.configs == nil {
+			f.configs = map[string][]map[string]string{}
+		}
+		var fields []map[string]string
+		for _, fl := range req["new_config"].(map[string]any)["fields"].([]any) {
+			m := fl.(map[string]any)
+			fields = append(fields, map[string]string{"name": m["name"].(string), "value": m["value"].(string)})
+		}
+		f.configs[req["tunnel_id"].(string)] = fields
+		ok(nil)
 	case "/claim/setup":
 		json.NewEncoder(w).Encode(map[string]any{"status": "fail", "data": "CodeNotFound"})
 	default:
@@ -221,6 +243,23 @@ func TestEnsureTunnelsWithFakePlayit(t *testing.T) {
 	if len(f.created) != 2 || f.created[0]["tunnel_type"] != "minecraft-java" || f.created[0]["port_type"] != "tcp" ||
 		f.created[1]["port_type"] != "udp" {
 		t.Fatalf("created %+v", f.created)
+	}
+	// The agent must be told to forward to the server's port, not the public one.
+	for id, fields := range f.configs {
+		want := "25570"
+		if strings.Contains(id, "bedrock") {
+			want = "19132"
+		}
+		got := map[string]string{}
+		for _, fl := range fields {
+			got[fl["name"]] = fl["value"]
+		}
+		if got["local_ip"] != "127.0.0.1" || got["local_port"] != want {
+			t.Errorf("agent config for %s: %v", id, got)
+		}
+	}
+	if len(f.configs) != 2 {
+		t.Fatalf("agent configs set: %d", len(f.configs))
 	}
 	if f.auth[0] != "Agent-Key abc123" {
 		t.Fatalf("auth header %q", f.auth[0])

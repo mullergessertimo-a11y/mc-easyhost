@@ -387,6 +387,18 @@ func ensureTunnels(secret string, port, bedrockPort int, waitFor time.Duration) 
 		}
 	}
 
+	// The playit agent forwards to the address in each tunnel's agent
+	// config. Tunnels made through the older API may not have one, and the
+	// agent then falls back to the tunnel's public port, which resets every
+	// connection. Write 127.0.0.1:<port> there and check the agent sees it.
+	ports := map[string]int{}
+	for _, w := range want {
+		ports[w.typ] = w.port
+	}
+	if err := syncAgentConfig(secret, ports, waitFor); err != nil {
+		return "", "", err
+	}
+
 	// New tunnels take a few seconds to get an address.
 	deadline := time.Now().Add(waitFor)
 	for {
@@ -419,6 +431,89 @@ func ensureTunnels(secret string, port, bedrockPort int, waitFor time.Duration) 
 		return "", "", errors.New("playit.gg has not assigned an address yet. Press Retry in a minute")
 	}
 	return java, bedrock, nil
+}
+
+type agentTunnelV1 struct {
+	ID             string `json:"id"`
+	TunnelType     string `json:"tunnel_type"`
+	DisplayAddress string `json:"display_address"`
+	AgentConfig    struct {
+		Fields []agentField `json:"fields"`
+	} `json:"agent_config"`
+}
+
+type agentField struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// effectiveTarget is where the playit agent will send a tunnel's traffic,
+// following the agent's own rules (origin_lookup.rs in playit-agent).
+func (t agentTunnelV1) effectiveTarget() (ip string, port int) {
+	ip = "127.0.0.1"
+	for _, f := range t.AgentConfig.Fields {
+		switch f.Name {
+		case "local_ip":
+			if v := strings.TrimSpace(f.Value); v != "" {
+				ip = v
+			}
+		case "local_port":
+			port, _ = strconv.Atoi(strings.TrimSpace(f.Value))
+		}
+	}
+	if port == 0 {
+		if i := strings.LastIndex(t.DisplayAddress, ":"); i >= 0 {
+			port, _ = strconv.Atoi(t.DisplayAddress[i+1:])
+		}
+	}
+	return ip, port
+}
+
+// syncAgentConfig points every tunnel of the given types at 127.0.0.1:port.
+func syncAgentConfig(secret string, ports map[string]int, waitFor time.Duration) error {
+	deadline := time.Now().Add(waitFor)
+	for {
+		var rd struct {
+			Tunnels []agentTunnelV1 `json:"tunnels"`
+		}
+		if err := playitCall("/v1/agents/rundata", secret, map[string]any{}, &rd); err != nil {
+			return err
+		}
+		pending := false
+		seen := map[string]bool{}
+		for _, t := range rd.Tunnels {
+			port, ok := ports[t.TunnelType]
+			if !ok {
+				continue
+			}
+			seen[t.TunnelType] = true
+			if ip, p := t.effectiveTarget(); ip == "127.0.0.1" && p == port {
+				continue
+			}
+			pending = true
+			fields := []agentField{{"local_ip", "127.0.0.1"}, {"local_port", strconv.Itoa(port)}}
+			for _, f := range t.AgentConfig.Fields {
+				if f.Name != "local_ip" && f.Name != "local_port" {
+					fields = append(fields, f)
+				}
+			}
+			if err := playitCall("/v1/tunnels/config", secret, map[string]any{
+				"tunnel_id": t.ID, "new_agent_id": nil, "new_config": map[string]any{"fields": fields},
+			}, nil); err != nil {
+				return fmt.Errorf("could not point the tunnel at the server: %w", err)
+			}
+		}
+		if len(seen) < len(ports) {
+			pending = true // a new tunnel isn't in the agent's list yet
+		}
+		if !pending {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.New("playit.gg didn't confirm the tunnel's local address. Press Retry")
+		}
+		time.Sleep(3 * time.Second)
+	}
 }
 
 // startTunnel runs while the server runs. Failures never stop the server.
