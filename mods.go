@@ -26,11 +26,12 @@ type InstalledMod struct {
 	Slug        string `json:"slug"`
 	Title       string `json:"title"`
 	Icon        string `json:"icon"`
-	Version     string `json:"version"`     // the mod's own version number
-	GameVersion string `json:"gameVersion"` // Minecraft version it was installed for
-	ClientSide  string `json:"clientSide"`  // required / optional / unsupported
-	Dependency  bool   `json:"dependency"`  // pulled in by another mod
-	Unknown     bool   `json:"unknown"`     // jar dropped in by hand
+	Version     string `json:"version"`        // the mod's own version number
+	GameVersion string `json:"gameVersion"`    // Minecraft version it was installed for
+	ClientSide  string `json:"clientSide"`     // required / optional / unsupported
+	Dependency  bool   `json:"dependency"`     // pulled in by another mod
+	Unknown     bool   `json:"unknown"`        // jar dropped in by hand
+	Pack        string `json:"pack,omitempty"` // part of this modpack
 }
 
 type ModHit struct {
@@ -378,12 +379,28 @@ func (m *Manager) UpdateMods() ([]string, []string) {
 	}
 	var ids []string
 	for key, im := range m.loadModsManifest() {
-		if strings.HasPrefix(key, folder+"/") && !im.Dependency {
+		if strings.HasPrefix(key, folder+"/") && !im.Dependency && im.ProjectID != "" {
 			ids = append(ids, im.ProjectID)
 		}
 	}
 	var updated, problems []string
 	for _, id := range ids {
+		if project, ok := strings.CutPrefix(id, geyserProjectID); ok {
+			modsMu.Lock()
+			mf := m.loadModsManifest()
+			name, err := m.installGeyserPlugin(mf, project)
+			if err == nil {
+				err = m.saveModsManifest(mf)
+			}
+			modsMu.Unlock()
+			if name != "" {
+				updated = append(updated, name)
+			}
+			if err != nil {
+				problems = append(problems, err.Error())
+			}
+			continue
+		}
 		got, err := m.InstallMod(id)
 		updated = append(updated, got...)
 		if err != nil {
@@ -413,8 +430,9 @@ func (m *Manager) warnModVersions(serverType, version string) {
 	}
 }
 
-// extraUDPPorts returns ports that installed mods need opened, today only
-// Simple Voice Chat (UDP 24454 unless its config says otherwise).
+// extraUDPPorts returns ports that installed mods need opened: Geyser for
+// Bedrock players (UDP 19132) and Simple Voice Chat (UDP 24454), unless
+// their configs say otherwise.
 func (m *Manager) extraUDPPorts(serverType string, mcPort int) []int {
 	folder, err := modFolder(serverType)
 	if err != nil {
@@ -426,8 +444,12 @@ func (m *Manager) extraUDPPorts(serverType string, mcPort int) []int {
 			hasVoice = true
 		}
 	}
+	var ports []int
+	if bp := m.bedrockPort(serverType); bp > 0 && bp != mcPort {
+		ports = append(ports, bp)
+	}
 	if !hasVoice {
-		return nil
+		return ports
 	}
 	port := 24454
 	for _, p := range []string{
@@ -452,9 +474,9 @@ func (m *Manager) extraUDPPorts(serverType string, mcPort int) []int {
 		port = mcPort
 	}
 	if port <= 0 || port > 65535 {
-		return nil
+		return ports
 	}
-	return []int{port}
+	return append(ports, port)
 }
 
 func (m *Manager) isStopped() bool {

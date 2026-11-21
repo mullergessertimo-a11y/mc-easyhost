@@ -34,6 +34,8 @@ var version = "dev"
 func main() {
 	headless := flag.Bool("headless", false, "don't open a window and keep running until stopped (for servers without a desktop)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
+	afterUpdate := flag.Bool("after-update", false, "started by the updater: wait for the old version to exit and reuse its window")
+	resume := flag.Bool("resume", false, "started by the updater: start the server again")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println("MC EasyHost", version)
@@ -61,6 +63,10 @@ func main() {
 	addr := fmt.Sprintf("127.0.0.1:%d", uiPort)
 	url := "http://" + addr + "/"
 	ln, err := net.Listen("tcp", addr)
+	for i := 0; err != nil && *afterUpdate && i < 60; i++ {
+		time.Sleep(500 * time.Millisecond) // the old version is still shutting down
+		ln, err = net.Listen("tcp", addr)
+	}
 	if err != nil {
 		if *headless {
 			fmt.Fprintln(os.Stderr, "MC EasyHost is already running (port", uiPort, "is in use)")
@@ -72,6 +78,7 @@ func main() {
 	}
 
 	initPlatform()
+	go cleanupOldBinary()
 	cfg := loadConfig(dataDir)
 	hub := NewHub()
 	if *headless {
@@ -79,16 +86,30 @@ func main() {
 	}
 	mgr := NewManager(dataDir, cfg, hub)
 	quit := make(chan struct{}, 1)
+	restart := make(chan string, 1)
+	updater := &Updater{}
+	if version != "dev" {
+		go updater.Check(false)
+	}
 
-	srv := &http.Server{Handler: api(mgr, cfg, hub, dataDir, quit)}
+	srv := &http.Server{Handler: api(mgr, cfg, hub, dataDir, quit, updater, restart)}
 	go srv.Serve(ln)
 	log.Println("UI on", url, "data in", dataDir)
 
 	if *headless {
 		fmt.Printf("MC EasyHost %s running. Control panel: %s\n", version, url)
 		fmt.Printf("From another computer: ssh -L %d:127.0.0.1:%d <this-host>, then open %s\n", uiPort, uiPort, url)
-	} else if os.Getenv("EASYHOST_NO_WINDOW") == "" {
+	} else if os.Getenv("EASYHOST_NO_WINDOW") == "" && !*afterUpdate {
 		openAppWindow(url, filepath.Join(dataDir, "ui-profile"))
+	}
+
+	if *resume {
+		mgr.log("[EasyHost] Updated to " + version + ". Starting the server again.")
+		if err := mgr.Start(); err != nil {
+			mgr.log("[EasyHost] Could not start the server: " + err.Error())
+		}
+	} else if *afterUpdate {
+		mgr.log("[EasyHost] Updated to " + version + ".")
 	}
 
 	// The app lives as long as a window is open. A short grace period
@@ -96,11 +117,14 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	tick := time.NewTicker(2 * time.Second)
+	restartTo := ""
 	for running := true; running; {
 		select {
 		case <-sig:
 			running = false
 		case <-quit:
+			running = false
+		case restartTo = <-restart:
 			running = false
 		case <-tick.C:
 			if *headless {
@@ -113,10 +137,29 @@ func main() {
 		}
 	}
 	log.Println("shutting down")
+	wasLive := mgr.Status().State == StateRunning || mgr.Status().State == StateStarting
 	mgr.StopAndWait()
+	mgr.stopTunnel()
+	if restartTo != "" {
+		hub.SendLog("[EasyHost] Restarting into the new version…")
+		srv.Close()
+		args := []string{}
+		for _, a := range os.Args[1:] {
+			if a != "--after-update" && a != "-after-update" && a != "--resume" && a != "-resume" {
+				args = append(args, a)
+			}
+		}
+		args = append(args, "--after-update")
+		if wasLive {
+			args = append(args, "--resume")
+		}
+		if err := restartSelf(restartTo, args); err != nil {
+			log.Println("restart after update failed:", err)
+		}
+	}
 }
 
-func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan struct{}) http.Handler {
+func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan struct{}, updater *Updater, restart chan string) http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(webFS, "web")
 	mux.Handle("/", http.FileServer(http.FS(static)))
@@ -180,8 +223,15 @@ func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan str
 			writeErr(w, err)
 			return
 		}
-		// EULA consent is only changed through /api/start.
-		c.EulaAccepted = cfg.Get().EulaAccepted
+		// EULA consent is only changed through /api/start, the tunnel
+		// through /api/tunnel. A modpack's Fabric loader stays only while
+		// its Minecraft version stays.
+		old := cfg.Get()
+		c.EulaAccepted, c.Tunnel = old.EulaAccepted, old.Tunnel
+		c.FabricLoader = ""
+		if c.ServerType == old.ServerType && c.Version == old.Version {
+			c.FabricLoader = old.FabricLoader
+		}
 		if err := cfg.Set(c); err != nil {
 			writeErr(w, err)
 			return
@@ -282,7 +332,100 @@ func api(mgr *Manager, cfg *ConfigStore, hub *Hub, dataDir string, quit chan str
 		if v, verr := mgr.targetVersion(); verr == nil {
 			res["version"] = v
 		}
+		res["crossplay"] = mgr.crossplayInstalled(cfg.Get().ServerType)
+		res["bedrockPort"] = mgr.bedrockPort(cfg.Get().ServerType)
+		res["modpack"] = mgr.CurrentModpack()
 		writeJSON(w, res)
+	})
+	mux.HandleFunc("POST /api/crossplay", func(w http.ResponseWriter, r *http.Request) {
+		installed, err := mgr.EnableCrossplay()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"installed": installed})
+	})
+
+	// ---- modpacks ----
+	mux.HandleFunc("GET /api/modpacks/search", func(w http.ResponseWriter, r *http.Request) {
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		hits, total, err := mgr.SearchModpacks(r.URL.Query().Get("q"), offset)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"hits": hits, "total": total})
+	})
+	mux.HandleFunc("POST /api/modpacks/install", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ID string `json:"id"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		p, err := mgr.InstallModpack(body.ID)
+		if err != nil {
+			mgr.log("[EasyHost] Modpack install failed: " + err.Error())
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, p)
+	})
+	mux.HandleFunc("POST /api/modpacks/upload", func(w http.ResponseWriter, r *http.Request) {
+		p, err := mgr.ImportModpack(r.Body)
+		if err != nil {
+			mgr.log("[EasyHost] Modpack install failed: " + err.Error())
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, p)
+	})
+
+	// ---- play from anywhere (playit.gg) ----
+	mux.HandleFunc("POST /api/tunnel/link", func(w http.ResponseWriter, r *http.Request) {
+		u, err := mgr.TunnelLink()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]string{"url": u})
+	})
+	mux.HandleFunc("POST /api/tunnel/unlink", func(w http.ResponseWriter, r *http.Request) {
+		mgr.TunnelUnlink()
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/tunnel/set", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			On bool `json:"on"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		if err := mgr.SetTunnel(body.On); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, cfg.Get())
+	})
+	mux.HandleFunc("POST /api/tunnel/retry", func(w http.ResponseWriter, r *http.Request) {
+		if err := mgr.RetryTunnel(); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+
+	// ---- app updates ----
+	mux.HandleFunc("GET /api/update", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, updater.Check(r.URL.Query().Get("force") == "1"))
+	})
+	mux.HandleFunc("POST /api/update", func(w http.ResponseWriter, r *http.Request) {
+		exe, err := updater.Install(dataDir)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			restart <- exe
+		}()
 	})
 	mux.HandleFunc("GET /api/mods/search", func(w http.ResponseWriter, r *http.Request) {
 		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))

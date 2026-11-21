@@ -29,18 +29,19 @@ const (
 )
 
 type Status struct {
-	State    State    `json:"state"`
-	Step     string   `json:"step"`     // human readable current step
-	Progress float64  `json:"progress"` // 0..1, or -1 for indeterminate
-	Error    string   `json:"error"`
-	Version  string   `json:"version"`
-	Type     string   `json:"type"`
-	MemoryMB int      `json:"memoryMB"`
-	Players  []string `json:"players"`     // names we know of
-	Count    int      `json:"playerCount"` // how many are online (from the server itself when possible)
-	Max      int      `json:"maxPlayers"`
-	Started  int64    `json:"started"` // unix ms when it became running
-	Net      NetInfo  `json:"net"`
+	State    State      `json:"state"`
+	Step     string     `json:"step"`     // human readable current step
+	Progress float64    `json:"progress"` // 0..1, or -1 for indeterminate
+	Error    string     `json:"error"`
+	Version  string     `json:"version"`
+	Type     string     `json:"type"`
+	MemoryMB int        `json:"memoryMB"`
+	Players  []string   `json:"players"`     // names we know of
+	Count    int        `json:"playerCount"` // how many are online (from the server itself when possible)
+	Max      int        `json:"maxPlayers"`
+	Started  int64      `json:"started"` // unix ms when it became running
+	Net      NetInfo    `json:"net"`
+	Tunnel   TunnelInfo `json:"tunnel"`
 }
 
 type Manager struct {
@@ -60,6 +61,9 @@ type Manager struct {
 	mappings []*portMapping
 	crashes  []time.Time // recent crashes, for the auto-restart limit
 	backupMu sync.Mutex
+
+	tunnelCmd *exec.Cmd     // the playit.gg agent while it runs
+	claimStop chan struct{} // cancels a pending playit.gg link
 }
 
 func NewManager(dataDir string, cfg *ConfigStore, hub *Hub) *Manager {
@@ -72,6 +76,7 @@ func NewManager(dataDir string, cfg *ConfigStore, hub *Hub) *Manager {
 	}
 	m.status.State = StateStopped
 	m.status.Progress = -1
+	m.status.Tunnel.Linked = m.playitSecret() != ""
 	return m
 }
 
@@ -123,7 +128,7 @@ func (m *Manager) Start() error {
 		m.mu.Unlock()
 		return ErrEula
 	}
-	m.status = Status{State: StatePreparing, Step: "Getting ready", Progress: -1, Net: m.status.Net}
+	m.status = Status{State: StatePreparing, Step: "Getting ready", Progress: -1, Net: m.status.Net, Tunnel: m.status.Tunnel}
 	m.players = map[string]bool{}
 	m.pinged = nil
 	m.stopReq = false
@@ -152,7 +157,7 @@ func (m *Manager) run() error {
 
 	m.step("Checking for the newest Minecraft version", -1)
 	recordPath := filepath.Join(m.serverDir, "easyhost-build.json")
-	build, err := resolveBuild(cfg.ServerType, cfg.Version)
+	build, err := resolveBuild(cfg.ServerType, cfg.Version, cfg.FabricLoader)
 	if err != nil {
 		// Offline? Reuse whatever we ran last time, if it matches the choice.
 		var rec buildRecord
@@ -211,6 +216,9 @@ func (m *Manager) run() error {
 	// Networking is best effort and must not delay the start.
 	m.warnModVersions(cfg.ServerType, build.Version)
 	go m.setupNetwork(cfg.Port, m.extraUDPPorts(cfg.ServerType, cfg.Port), cfg.UPnP, java)
+	if cfg.Tunnel {
+		go m.startTunnel(cfg.Port, m.bedrockPort(cfg.ServerType))
+	}
 
 	args := []string{fmt.Sprintf("-Xms%dM", mem), fmt.Sprintf("-Xmx%dM", mem)}
 	if cfg.ServerType != "vanilla" && build.JavaMajor >= 17 {
@@ -390,6 +398,7 @@ func (m *Manager) onExit(err error) {
 	for _, pm := range mappings {
 		pm.Remove()
 	}
+	m.stopTunnel()
 	if requested || err == nil {
 		m.log("[EasyHost] Server stopped.")
 		m.update(func(s *Status) { s.State = StateStopped; s.Step = ""; s.Started = 0; s.Net.UPnP = "" })
@@ -534,7 +543,7 @@ func (m *Manager) Command(c string) error {
 // setupNetwork opens the Minecraft TCP port, plus UDP ports that mods need
 // (voice chat), in the firewall and on the router.
 func (m *Manager) setupNetwork(port int, udp []int, upnp bool, java string) {
-	info := NetInfo{LanIP: lanIP(), Port: port}
+	info := NetInfo{LanIP: lanIP(), Port: port, BedrockPort: m.bedrockPort(m.cfg.Get().ServerType)}
 	m.update(func(s *Status) { s.Net = info })
 
 	if msg := ensureFirewall(m.dataDir, java, port, udp); msg != "" {
@@ -561,15 +570,19 @@ func (m *Manager) setupNetwork(port int, udp []int, upnp bool, java string) {
 			m.log(fmt.Sprintf("[EasyHost] Opened port %d on your router.", port))
 			for _, u := range udp {
 				upm, _, err := addPortMapping(u, "UDP", info.LanIP)
+				what := "voice chat"
+				if u == m.bedrockPort(m.cfg.Get().ServerType) {
+					what = "Bedrock"
+				}
 				if err != nil {
-					m.log(fmt.Sprintf("[EasyHost] Could not open voice chat port %d (UDP) on your router: %v. Voice chat only works for friends on your Wi-Fi until it is forwarded.", u, err))
+					m.log(fmt.Sprintf("[EasyHost] Could not open %s port %d (UDP) on your router: %v. It only works for friends on your Wi-Fi until it is forwarded.", what, u, err))
 				} else if m.keepMapping(upm) {
-					m.log(fmt.Sprintf("[EasyHost] Opened voice chat port %d (UDP) on your router.", u))
+					m.log(fmt.Sprintf("[EasyHost] Opened %s port %d (UDP) on your router.", what, u))
 				}
 			}
 			if ext != "" && info.PublicIP != "" && ext != info.PublicIP {
 				info.CGNAT = true
-				m.log("[EasyHost] Your internet provider shares one public IP between many customers (CGNAT), so friends outside your home cannot connect directly. A free tunnel like playit.gg solves this.")
+				m.log("[EasyHost] Your internet provider shares one public IP between many customers (CGNAT), so friends outside your home cannot connect directly. Turn on \"Play from anywhere\" (left side) to fix this.")
 			}
 		}
 	} else {

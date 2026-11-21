@@ -63,6 +63,20 @@ Then browse to http://127.0.0.1:47615. To start it on boot, use the included `mc
   (one password prompt). It also opens the port on the router via **UPnP**, explaining what to change when the
   router refuses.
 - Shows the LAN and internet addresses to share, and warns when the provider uses CGNAT
+- **Play from anywhere:** one switch gives the server a public address (like `name.joinmc.link`) through a free
+  [playit.gg](https://playit.gg) tunnel. It works behind CGNAT, on school or dorm networks and with routers
+  that don't do UPnP. You link a playit account once in the browser; the app downloads the official playit agent
+  (pinned version, checksum-verified), creates the tunnels through playit's API and runs the agent only while
+  the server runs. "Disconnect" deletes the tunnels again.
+- **Bedrock crossplay:** "Let Bedrock players join" installs Geyser and Floodgate (Paper or Fabric), so friends on
+  phones, tablets, consoles and Windows Bedrock can join without a Java account. UDP 19132 is opened in the
+  firewall, on the router and (with play from anywhere) through a Bedrock tunnel.
+- **Modpacks:** search Modrinth's Fabric modpacks or upload a `.mrpack`. The app sets the exact Minecraft version
+  and Fabric loader the pack needs, downloads its server-side files with checksum checks (only from the hosts
+  the format allows), copies its config overrides, and moves your previous mods aside. The world and your
+  settings are never overwritten by a pack.
+- **Updates:** when a new release is out, an "Update available" button appears. The app downloads it, checks the
+  SHA-256 GitHub publishes, swaps itself and restarts; a running server is saved and started again.
 - **Command helper:** the console suggests commands as you type, with a plain explanation of each, and **Tab**
   completes them: online player names, items, effects, mobs, structures and game rules (new snake_case
   names from 26.1, old ones before). "All commands" is a searchable reference, and one-click buttons do the
@@ -98,6 +112,10 @@ in a chromeless browser window (`--app`). The local API only accepts requests wi
 | `network.go` | LAN/public IP, UPnP port mapping and router error hints |
 | `slp.go` | Minecraft status ping for the live player count |
 | `mods.go` | Modrinth search/install/remove, dependency resolution, voice chat port |
+| `modpacks.go` | Modrinth modpacks (`.mrpack`): search, install, upload |
+| `crossplay.go` | Geyser + Floodgate for Bedrock players, Bedrock port |
+| `tunnel.go` | Play from anywhere: playit.gg account link, tunnels, agent process |
+| `update.go` | Update check against GitHub releases, self-replace and restart |
 | `playerlists.go` | Admins, whitelist and bans; Mojang/offline account IDs |
 | `web/commands.js` | Command reference and autocomplete |
 | `worlds.go`, `nbt.go` | Seeds, singleplayer import, zip upload, backups; level.dat reader |
@@ -122,7 +140,8 @@ EASYHOST_ONLINE=1 go test -run Online -v ./...
 ```
 
 For development: `EASYHOST_NO_WINDOW=1 EASYHOST_DATA=/tmp/eh EASYHOST_PORT=47699 go run .`, then open
-http://127.0.0.1:47699. The separate port lets it run next to an installed copy.
+http://127.0.0.1:47699. The separate port lets it run next to an installed copy. `EASYHOST_RELEASES_URL` points
+the updater at a local fake release JSON for testing (dev builds, version `dev`, never check for updates).
 
 Pushing a tag like `v1.2.0` makes GitHub Actions build every package and attach them to a release.
 

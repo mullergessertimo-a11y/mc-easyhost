@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 func initPlatform() {}
@@ -72,3 +73,13 @@ func openAppWindow(url, profileDir string) {
 }
 
 func openFolder(path string) { exec.Command("xdg-open", path).Start() }
+
+// playitSocketPath is the socket our private playit agent listens on,
+// separate from an installed playit app.
+func playitSocketPath(dir string) string { return filepath.Join(dir, "playitd.sock") }
+
+// restartSelf replaces this process with the updated program. Keeping the
+// process id means a systemd service just carries on.
+func restartSelf(exe string, args []string) error {
+	return syscall.Exec(exe, append([]string{exe}, args...), os.Environ())
+}

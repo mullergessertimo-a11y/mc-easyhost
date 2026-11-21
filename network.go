@@ -22,6 +22,8 @@ type NetInfo struct {
 	Port     int    `json:"port"`
 	UPnP     string `json:"upnp"` // "", "trying", "ok", "failed", "off"
 	CGNAT    bool   `json:"cgnat"`
+	// UDP port for Bedrock players when crossplay (Geyser) is installed
+	BedrockPort int `json:"bedrockPort,omitempty"`
 }
 
 // lanIP returns the address other devices in the home network use to reach

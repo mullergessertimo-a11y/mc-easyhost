@@ -28,6 +28,8 @@ type Config struct {
 	AutoBackupHours int    `json:"autoBackupHours"` // 0 = off; back up while running every N hours
 	AutoBackupKeep  int    `json:"autoBackupKeep"`  // how many automatic backups to keep
 	AutoRestart     bool   `json:"autoRestart"`     // restart after a crash (max 3 times in 15 min)
+	Tunnel          bool   `json:"tunnel"`          // run the playit.gg tunnel (play from anywhere)
+	FabricLoader    string `json:"fabricLoader"`    // pinned Fabric loader (set by modpacks), "" = newest
 }
 
 func defaultConfig() Config {

@@ -81,7 +81,7 @@ func TestOnlineResolveAndJava(t *testing.T) {
 		t.Skip("set EASYHOST_ONLINE=1")
 	}
 	for _, typ := range []string{"paper", "vanilla"} {
-		b, err := resolveBuild(typ, "latest")
+		b, err := resolveBuild(typ, "latest", "")
 		if err != nil {
 			t.Fatal(typ, err)
 		}
@@ -92,7 +92,7 @@ func TestOnlineResolveAndJava(t *testing.T) {
 		}
 		t.Logf("%s offers %d versions, newest %s, oldest %s", typ, len(list), list[0], list[len(list)-1])
 	}
-	old, err := resolveBuild("vanilla", "1.16.5")
+	old, err := resolveBuild("vanilla", "1.16.5", "")
 	if err != nil || old.JavaMajor != 8 {
 		t.Fatalf("1.16.5: %v %+v", err, old)
 	}
@@ -101,7 +101,7 @@ func TestOnlineResolveAndJava(t *testing.T) {
 	if dir == "" {
 		dir = t.TempDir()
 	}
-	b, _ := resolveBuild("paper", "latest")
+	b, _ := resolveBuild("paper", "latest", "")
 	java, err := ensureJava(dir, b.JavaMajor, func(s string, p float64) {})
 	if err != nil {
 		t.Fatal(err)

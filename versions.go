@@ -114,7 +114,9 @@ func paperVersions() (map[string]bool, error) {
 }
 
 // resolveBuild turns the user's choice into a concrete download.
-func resolveBuild(serverType, version string) (*ServerBuild, error) {
+// resolveBuild finds what to download for a server. fabricLoader pins the
+// Fabric loader (modpacks need a specific one); "" means the newest.
+func resolveBuild(serverType, version, fabricLoader string) (*ServerBuild, error) {
 	m, err := getManifest()
 	if err != nil {
 		return nil, fmt.Errorf("could not reach Mojang (are you online?): %w", err)
@@ -154,6 +156,9 @@ func resolveBuild(serverType, version string) (*ServerBuild, error) {
 		loader, installer, err := fabricLoaderAndInstaller()
 		if err != nil {
 			return nil, fmt.Errorf("could not reach Fabric: %w", err)
+		}
+		if fabricLoader != "" {
+			loader = fabricLoader
 		}
 		// The launcher jar downloads the matching vanilla server on first start.
 		return &ServerBuild{

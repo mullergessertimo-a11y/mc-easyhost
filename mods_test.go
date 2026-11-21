@@ -103,7 +103,7 @@ func TestOnlineFabricBuild(t *testing.T) {
 	if os.Getenv("EASYHOST_ONLINE") == "" {
 		t.Skip("set EASYHOST_ONLINE=1")
 	}
-	b, err := resolveBuild("fabric", "latest")
+	b, err := resolveBuild("fabric", "latest", "")
 	if err != nil {
 		t.Fatal(err)
 	}

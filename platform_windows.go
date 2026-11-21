@@ -154,3 +154,14 @@ func defaultDataDir() string {
 	}
 	return "MC EasyHost"
 }
+
+// playitSocketPath is the named pipe our private playit agent listens on,
+// separate from an installed playit app.
+func playitSocketPath(dir string) string {
+	return fmt.Sprintf(`\\.\pipe\mc-easyhost-playit-%d`, uiPort)
+}
+
+// restartSelf starts the updated program; the caller then exits.
+func restartSelf(exe string, args []string) error {
+	return exec.Command(exe, args...).Start()
+}

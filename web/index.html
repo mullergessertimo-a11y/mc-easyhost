@@ -171,6 +171,24 @@ input[type=range] { accent-color: var(--green); width: 100%; }
 .modal a { color: var(--blue); }
 .modal .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
 
+.anywhere { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.anywhere .head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; }
+.anywhere .head .sp { flex: 1; }
+.anywhere .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.switch { position: relative; width: 36px; height: 20px; flex: none; cursor: pointer; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 99px; transition: background .15s; }
+.switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked + span { background: var(--green); }
+.switch input:checked + span::after { transform: translateX(16px); }
+.linkbtn { border: 0; background: none; color: var(--dim); cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline; }
+.upd { border-color: var(--green) !important; color: var(--green); }
+.xplay { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+.xplay .txt { flex: 1; }
+.xplay .txt b { display: block; }
+.xplay .txt small { color: var(--muted); }
+.notes { white-space: pre-wrap; max-height: 40vh; overflow: auto; background: var(--panel2); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #c8ccd1; }
+
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%) translateY(80px); background: #2b3036; border: 1px solid var(--line); padding: 10px 16px; border-radius: 8px; transition: transform .25s; z-index: 20; max-width: 90vw; }
 .toast.on { transform: translateX(-50%) translateY(0); }
 .toast.err { border-color: var(--red); }
@@ -190,6 +208,7 @@ input[type=range] { accent-color: var(--green); width: 100%; }
     <svg class="logo" viewBox="0 0 16 16"><rect width="16" height="16" fill="#5b8c32"/><rect y="10" width="16" height="6" fill="#866043"/><rect x="0" y="9" width="2" height="2" fill="#5b8c32"/><rect x="7" y="9" width="3" height="2" fill="#5b8c32"/><rect x="3" y="5" width="3" height="3" fill="#4a7a28"/><rect x="10" y="3" width="3" height="3" fill="#6fa83d"/><rect x="2" y="12" width="2" height="2" fill="#6b4a32"/><rect x="11" y="13" width="2" height="2" fill="#6b4a32"/></svg>
     <h1>MC EasyHost <small id="ver" style="color:var(--dim);font-weight:400;font-size:12px"></small></h1>
     <div class="sp"></div>
+    <button class="btn small upd" id="updBtn" hidden>Update available</button>
     <div class="pill" id="pill"><i></i><span id="pillText">Stopped</span></div>
   </header>
 
@@ -209,7 +228,12 @@ input[type=range] { accent-color: var(--green); width: 100%; }
         <div class="label">Over the internet</div>
         <div class="addr"><code id="wanAddr">–</code><button class="copy" data-copy="wanAddr">Copy</button></div>
         <div class="note" id="netNote">Addresses appear once the server is starting.</div>
+        <div id="bedrockRows" hidden>
+          <div class="label" style="margin-top:12px">Bedrock players (phones, consoles), same Wi-Fi</div>
+          <div class="addr"><code id="bedLan">–</code><button class="copy" data-copy="bedLan">Copy</button></div>
+        </div>
         <div class="note">On this PC, connect to <code>localhost</code>.</div>
+        <div class="anywhere" id="anywhere"></div>
       </div>
 
       <div class="card">
@@ -266,16 +290,28 @@ input[type=range] { accent-color: var(--green); width: 100%; }
 
       <div class="tab" id="tab-mods">
         <div id="modsIntro"></div>
-        <div class="sec">Installed <span class="badge" id="modsCount">0</span><span class="sp"></span>
+        <div id="xplay"></div>
+        <div class="sec modonly">Installed <span class="badge" id="modsCount">0</span><span class="sp"></span>
           <button class="btn small" id="modsUpdate" title="Reinstall every mod for the Minecraft version the server will use">Update all</button></div>
         <div class="list" id="modsInstalled"></div>
-        <div class="sec">Add more from Modrinth</div>
+        <div class="sec modonly">Add more from Modrinth</div>
         <form class="inline-form" id="modSearchForm" autocomplete="off">
           <input type="text" id="modQuery" placeholder="Search, e.g. voice chat, essentials, minimap…">
           <button class="btn">Search</button>
         </form>
         <div class="list" id="modsResults" style="margin-top:10px"></div>
         <button class="btn" id="modsMore" style="margin-top:10px" hidden>Show more</button>
+
+        <div class="sec">Modpacks</div>
+        <div id="packCurrent"></div>
+        <form class="inline-form" id="packSearchForm" autocomplete="off">
+          <input type="text" id="packQuery" placeholder="Search modpacks, e.g. Cobblemon, Fabulously Optimized, create…">
+          <button class="btn">Search</button>
+          <label class="btn" style="cursor:pointer">Upload .mrpack<input type="file" id="packFile" accept=".mrpack" hidden></label>
+        </form>
+        <div class="note">A modpack sets the Minecraft version and installs all its mods at once (Fabric modpacks from Modrinth). Your world stays; your current mods are moved to the Backups folder. Everyone who joins needs the same modpack, e.g. in the Modrinth App or Prism Launcher.</div>
+        <div class="list" id="packResults" style="margin-top:10px"></div>
+        <button class="btn" id="packMore" style="margin-top:10px" hidden>Show more</button>
       </div>
 
       <div class="tab" id="tab-world">
@@ -386,9 +422,17 @@ input[type=range] { accent-color: var(--green); width: 100%; }
         <p>They use the <b>Over the internet</b> address. For this the port must be open on your router. EasyHost tries this automatically (UPnP). If it says it could not:</p>
         <ul>
           <li>Turn on <b>UPnP</b> in your router's settings, or set up a port forward for TCP port <code id="helpPort">25565</code> to <code id="helpIP">this PC</code>.</li>
-          <li>If EasyHost says your provider uses <b>CGNAT</b>, port forwarding cannot work. A free tunnel such as <b>playit.gg</b> gives you an address that works anyway.</li>
+          <li>If EasyHost says your provider uses <b>CGNAT</b>, port forwarding cannot work. Use <b>Play from anywhere</b> instead (below).</li>
           <li id="fwHelp">The first start asks for permission to add a Windows Firewall rule. Say yes, or friends can't connect.</li>
         </ul>
+        <h4>Play from anywhere</h4>
+        <p>If friends can't reach the internet address (CGNAT, school or dorm Wi-Fi, a router without UPnP), turn on <b>Play from anywhere</b> on the left. It uses <b>playit.gg</b>, a free tunnel service: you link a free playit account once in your browser, and from then on your server gets an address like <code>name.joinmc.link</code> that works from anywhere, with no router settings. Players' traffic goes through playit's servers. <b>Disconnect</b> removes the link and its tunnels again.</p>
+        <h4>Bedrock players (crossplay)</h4>
+        <p>On the Plugins/Mods tab, <b>Let Bedrock players join</b> installs <b>Geyser</b> and <b>Floodgate</b>. Then people on phones, tablets, Xbox, PlayStation, Switch and Windows Bedrock can join your Java server without a Java account. They add a server with the Bedrock address shown on the left (port <code>19132</code>). Consoles can't type in server addresses directly; search for "BedrockTogether" or "MC Server Connector" for help with that.</p>
+        <h4>Modpacks</h4>
+        <p>On the Mods tab you can install a whole Fabric modpack from Modrinth, or upload a <code>.mrpack</code> file. EasyHost sets the right Minecraft and Fabric version and downloads all server-side mods. Your friends install the same modpack in the Modrinth App, Prism Launcher or CurseForge app.</p>
+        <h4>Updates</h4>
+        <p>When a new version of MC EasyHost is out, an <b>Update available</b> button appears at the top. One click downloads it, checks it, and restarts the app (your server is saved and started again).</p>
         <h4>Mods and plugins</h4>
         <p>With <b>Paper</b> you add <b>plugins</b>. They run only on the server, so friends join with normal Minecraft. With <b>Fabric</b> you add <b>mods</b>, which can add new things to the game; mods marked "players need it too" must also be installed by everyone, together with Fabric. Install and remove them on the Plugins/Mods tab, then restart the server.</p>
         <p><b>Simple Voice Chat</b> works on both. Every player needs the voice chat mod in their own Minecraft. EasyHost also opens its voice port (UDP 24454).</p>
@@ -426,6 +470,19 @@ input[type=range] { accent-color: var(--green); width: 100%; }
     <input type="text" id="refSearch" placeholder="What do you want to do? e.g. teleport, items, night, ban…" style="margin-top:12px" autocomplete="off">
     <div class="list" id="refList"></div>
     <div class="note">Click a command to put it in the console. <code>&lt;…&gt;</code> must be filled in, <code>[…]</code> is optional.</div>
+  </div>
+</div>
+
+<div class="modal" id="updModal">
+  <div class="card" style="max-width:560px">
+    <h2 id="updTitle">Update available</h2>
+    <div class="notes" id="updNotes"></div>
+    <p class="note" id="updNote"></p>
+    <div class="row">
+      <button class="btn" id="updLater">Later</button>
+      <a class="btn" id="updPage" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">Release page</a>
+      <button class="btn primary" id="updGo">Update now</button>
+    </div>
   </div>
 </div>
 
@@ -502,6 +559,9 @@ function render() {
   else if (n.upnp === 'off') { note.textContent = 'Automatic port opening is off. Forward the port yourself for internet play.'; note.className = 'note'; }
   $('#helpPort').textContent = port;
   if (n.lanIP) $('#helpIP').textContent = n.lanIP;
+  $('#bedrockRows').hidden = !(n.bedrockPort && n.lanIP && !stopped());
+  if (n.bedrockPort && n.lanIP) $('#bedLan').textContent = n.lanIP + ':' + n.bedrockPort;
+  renderTunnel();
 
   const canCmd = st === 'running' || st === 'starting';
   $('#cmdInput').disabled = $('#cmdBtn').disabled = !canCmd;
@@ -522,6 +582,82 @@ function render() {
       <button class="btn small" data-ban="${esc(p)}">Ban</button>
     </div>`).join('') + (unnamed ? `<div class="empty-state" style="padding:8px 0">+ ${unnamed} more player${unnamed > 1 ? 's' : ''} (the server didn't share ${players.length ? 'their' : 'the'} names)</div>` : '') : `<div class="empty-state">${st === 'running' ? 'Nobody is online yet.' : 'Start the server to see who is playing.'}</div>`;
 }
+
+// ---------- play from anywhere (playit.gg) ----------
+function renderTunnel() {
+  const t = status.tunnel || {}, el = $('#anywhere');
+  const live = status.state === 'running' || status.state === 'starting';
+  const addr = (label, a) => `<div class="label" style="margin-top:8px">${label}</div><div class="addr"><code>${esc(a)}</code><button class="copy" data-copy2="${esc(a)}">Copy</button></div>`;
+  let html = `<div class="head">Play from anywhere<span class="sp"></span>${t.linked ? `<label class="switch" title="Turn the tunnel on or off"><input type="checkbox" id="tunnelOn" ${config.tunnel ? 'checked' : ''}><span></span></label>` : ''}</div>`;
+  if (t.state === 'linking') html += `<div class="note">1. Open playit.gg and log in, or make a free account.<br>2. Approve <b>MC EasyHost</b>. This panel continues by itself.</div>
+      <div class="row"><a class="btn small primary" href="${esc(t.claimURL)}" target="_blank" rel="noopener" style="text-decoration:none">Open playit.gg</a><button class="btn small" data-tunnel="unlink">Cancel</button></div>`;
+  else if (!t.linked) html += `<div class="note">Friends can't join over the internet? This gives your server an address that works everywhere, with no router settings. Free, via playit.gg.</div>
+      ${t.error ? `<div class="note warn">${esc(t.error)}</div>` : ''}<div class="row"><button class="btn small primary" data-tunnel="link">Set up</button></div>`;
+  else if (!config.tunnel) html += '<div class="note">Off. Friends use the addresses above.</div>';
+  else if (t.state === 'online') html += addr('Java players', t.java) + (t.bedrock ? addr('Bedrock players', t.bedrock) : '') + '<div class="note ok">✓ Works from anywhere.</div>';
+  else if (t.state === 'connecting') html += '<div class="note">Connecting to playit.gg…</div>';
+  else if (t.state === 'error') html += `<div class="note warn">${esc(t.error)}</div><div class="row"><button class="btn small" data-tunnel="retry" ${live ? '' : 'disabled'}>Retry</button></div>`;
+  else html += `<div class="note">${live ? 'Connecting…' : 'On. The address appears when the server starts.'}</div>`;
+  if (t.linked) html += '<div class="row"><button class="linkbtn" data-tunnel="unlink">Disconnect playit.gg</button></div>';
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+}
+$('#anywhere').addEventListener('click', async e => {
+  const b = e.target.closest('[data-tunnel]'); if (!b) return;
+  const a = b.dataset.tunnel;
+  if (a === 'unlink' && status.tunnel?.linked && !confirm('Disconnect playit.gg? The play-from-anywhere address stops working and its tunnels are deleted.')) return;
+  try {
+    if (a === 'link') { const d = await call('tunnel/link', {}); window.open(d.url, '_blank', 'noopener'); }
+    else await call('tunnel/' + a, {});
+    if (a === 'unlink') config.tunnel = false;
+  } catch (err) { toast(err.message, true); }
+});
+$('#anywhere').addEventListener('change', async e => {
+  if (e.target.id !== 'tunnelOn') return;
+  try { config = await call('tunnel/set', { on: e.target.checked }); renderTunnel(); }
+  catch (err) { toast(err.message, true); e.target.checked = !e.target.checked; }
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy2]'); if (!b) return;
+  navigator.clipboard.writeText(b.dataset.copy2).then(() => toast('Copied ' + b.dataset.copy2));
+});
+
+// ---------- app updates ----------
+let upd = null, updating = false;
+async function checkUpdate(force) {
+  try { upd = await call('update' + (force ? '?force=1' : '')); } catch { return; }
+  $('#updBtn').hidden = !upd.available;
+  $('#updBtn').textContent = 'Update to ' + upd.latest;
+}
+$('#updBtn').addEventListener('click', () => {
+  const live = !stopped();
+  $('#updTitle').textContent = 'MC EasyHost ' + upd.latest + ' is available';
+  $('#updNotes').textContent = upd.notes || 'No release notes.';
+  $('#updNotes').hidden = false;
+  $('#updNote').textContent = upd.canInstall
+    ? (live ? 'The world is saved, the app restarts into the new version and starts your server again. Players are disconnected for about a minute.' : 'The app restarts into the new version. This takes a few seconds.')
+    : "This system can't update automatically. Download the new version from the release page.";
+  $('#updGo').hidden = !upd.canInstall; $('#updGo').disabled = false; $('#updGo').textContent = 'Update now';
+  $('#updPage').href = upd.page; $('#updLater').hidden = false;
+  $('#updModal').classList.add('on');
+});
+$('#updLater').addEventListener('click', () => $('#updModal').classList.remove('on'));
+$('#updGo').addEventListener('click', async () => {
+  const go = $('#updGo');
+  go.disabled = true; go.textContent = 'Downloading…'; $('#updLater').hidden = true;
+  try { await call('update', {}); }
+  catch (err) { toast(err.message, true); go.disabled = false; go.textContent = 'Update now'; $('#updLater').hidden = false; return; }
+  updating = true;
+  go.textContent = 'Restarting…';
+  $('#updNotes').hidden = true;
+  $('#updNote').textContent = 'Installing ' + upd.latest + '. This window reloads by itself.';
+  const until = Date.now() + 180000;
+  const poll = async () => {
+    try { const s = await call('state'); if (s.info.version === upd.latest) return location.reload(); } catch {}
+    if (Date.now() < until) setTimeout(poll, 1500);
+    else $('#updNote').textContent = 'The update takes longer than expected. Close this window and open MC EasyHost again.';
+  };
+  setTimeout(poll, 2000);
+});
 
 function uptime(t) {
   const m = Math.floor((Date.now() - t) / 60000);
@@ -665,7 +801,10 @@ function connect() {
   es.addEventListener('backlog', e => { logEl.innerHTML = ''; addLines(JSON.parse(e.data)); if (!logEl.childElementCount) logEl.innerHTML = '<div class="empty">The server\'s output will show up here.</div>'; });
   es.addEventListener('log', e => addLines([JSON.parse(e.data)]));
   es.addEventListener('status', e => {
-    const was = stopped(); status = JSON.parse(e.data); render();
+    const was = stopped(), wasLinked = !!status.tunnel?.linked;
+    status = JSON.parse(e.data);
+    if (!wasLinked && status.tunnel?.linked) call('state').then(s => { config = s.config; render(); toast('playit.gg is connected.'); }).catch(() => {});
+    render();
     if (was !== stopped()) { if ($('#tab-world').classList.contains('on')) loadWorlds(); if ($('#tab-mods').classList.contains('on')) loadMods(); }
   });
 }
@@ -710,12 +849,13 @@ function modItem(m, kind) {
   const badges = [];
   if (m.dependency) badges.push('<span class="badge">needed by another ' + (isMod ? 'mod' : 'plugin') + '</span>');
   if (m.unknown) badges.push('<span class="badge">added by hand</span>');
+  if (m.pack) badges.push(`<span class="badge">from ${esc(m.pack)}</span>`);
   if (isMod && m.clientSide === 'required') badges.push('<span class="badge warn">players need it too</span>');
   else if (m.clientSide === 'optional' && /voice/i.test(m.title)) badges.push('<span class="badge warn">players need it for voice</span>');
   else if (m.clientSide === 'optional' && isMod) badges.push('<span class="badge">optional for players</span>');
   const link = m.slug ? `https://modrinth.com/${isMod ? 'mod' : 'plugin'}/${encodeURIComponent(m.slug)}` : '';
   const title = link ? `<a href="${link}" target="_blank" rel="noopener">${esc(m.title)}</a>` : esc(m.title);
-  const sub = kind === 'installed' ? (m.unknown ? m.file : `${esc(m.version || '')}${m.gameVersion ? ' · for ' + esc(m.gameVersion) : ''}`) : esc(m.description || '');
+  const sub = kind === 'installed' ? (m.unknown ? esc(m.file) : [m.version, m.gameVersion && 'for ' + m.gameVersion].filter(Boolean).map(esc).join(' · ')) : esc(m.description || '');
   const icon = m.icon ? `<img src="${esc(m.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>';
   const btn = kind === 'installed'
     ? `<button class="btn small" data-remove="${esc(m.file)}" ${stopped() ? '' : 'disabled title="Stop the server first"'}>Remove</button>`
@@ -727,8 +867,13 @@ async function loadMods() {
   const d = await call('mods').catch(err => ({ error: err.message }));
   const intro = $('#modsIntro');
   const vanilla = config.serverType === 'vanilla';
-  $$('#tab-mods .sec, #modSearchForm, #modsInstalled, #modsResults').forEach(el => el.hidden = vanilla);
+  $$('#tab-mods .modonly, #modSearchForm, #modsInstalled, #modsResults').forEach(el => el.hidden = vanilla);
   $('#modsMore').hidden = true;
+  renderPack(d.modpack);
+  if (!$('#packResults').childElementCount) searchPacks('', false);
+  $('#xplay').innerHTML = vanilla ? '' : d.crossplay
+    ? `<div class="infobox xplay"><div class="txt"><b>Bedrock players can join <span class="badge ok">on</span></b><small>Phones, tablets, consoles and Windows Bedrock connect on port ${d.bedrockPort}. Geyser and Floodgate are in the list below${status.state === 'running' ? '; restart the server if you just turned it on' : ''}.</small></div></div>`
+    : `<div class="infobox xplay"><div class="txt"><b>Let Bedrock players join</b><small>Friends on phones, tablets, Xbox, PlayStation, Switch or Windows Bedrock can play with you. Installs Geyser and Floodgate.</small></div><button class="btn primary" id="xplayBtn">Turn on crossplay</button></div>`;
   if (vanilla) {
     intro.innerHTML = `<div class="infobox">Vanilla Minecraft can't load add-ons. Pick one of these (your world stays the same):
       <div class="row"><button class="btn primary" data-switch="paper">Use Paper: plugins</button><button class="btn" data-switch="fabric">Use Fabric: mods</button></div>
@@ -742,7 +887,7 @@ async function loadMods() {
   modSlugs = list.map(m => m.slug).filter(Boolean);
   $('#modsCount').textContent = list.length;
   $('#modsInstalled').innerHTML = list.length ? list.map(m => modItem(m, 'installed')).join('') : `<div class="empty-state" style="padding:10px 0">No ${typeWord()} yet. Search below.</div>`;
-  $('#modsUpdate').disabled = !stopped() || !list.some(m => !m.unknown);
+  $('#modsUpdate').disabled = !stopped() || !list.some(m => !m.unknown && !m.pack);
   if (!$('#modsResults').childElementCount) searchMods('', false);
 }
 async function searchMods(q, more) {
@@ -760,6 +905,14 @@ $('#modSearchForm').addEventListener('submit', e => { e.preventDefault(); search
 $('#modsMore').addEventListener('click', () => searchMods(modQuery, true));
 $('#tab-mods').addEventListener('click', async e => {
   const inst = e.target.closest('[data-install]'), rem = e.target.closest('[data-remove]'), sw = e.target.closest('[data-switch]');
+  const xp = e.target.closest('#xplayBtn'), pk = e.target.closest('[data-pack]');
+  if (xp) await busyBtn(xp, 'Installing…', async () => {
+    const d = await call('crossplay', {});
+    toast(d.installed.length ? 'Installed ' + d.installed.join(', ') + (status.state === 'running' ? '. Restart the server to turn on crossplay.' : '. Bedrock players can join after the next start.') : 'Crossplay is already installed.');
+    loadMods();
+  });
+  if (pk && confirm(`Install the modpack "${pk.dataset.title}"?\n\nThe server switches to Fabric and the Minecraft version the pack needs, and all its mods are downloaded. Your current mods are moved to the Backups folder. Your world stays.`))
+    await busyBtn(pk, 'Installing…', () => packInstalled(call('modpacks/install', { id: pk.dataset.pack })));
   if (inst) await busyBtn(inst, 'Installing…', async () => {
     const d = await call('mods/install', { id: inst.dataset.install });
     toast('Installed ' + d.installed.join(', ') + (status.state === 'running' ? '. Restart the server to load it.' : ''));
@@ -769,6 +922,55 @@ $('#tab-mods').addEventListener('click', async e => {
   if (rem) await busyBtn(rem, 'Removing…', async () => { await call('mods/remove', { file: rem.dataset.remove }); loadMods(); });
   if (sw) { config = await call('config', { ...config, serverType: sw.dataset.switch }); fillForm(); loadVersions(config.serverType); $('#modsResults').innerHTML = ''; loadMods(); }
 });
+// ---------- modpacks ----------
+let packOffset = 0, packTotal = 0, packQ = '';
+function renderPack(p) {
+  $('#packCurrent').innerHTML = p ? `<div class="item" style="max-width:820px;margin-bottom:10px">${p.icon ? `<img src="${esc(p.icon)}" alt="">` : '<div class="ph"></div>'}
+      <div class="txt"><b>${esc(p.name)} <span class="badge ok">installed</span></b><small>${esc(p.version || '')} · Minecraft ${esc(p.minecraft)} · Fabric loader ${esc(p.loader)} · since ${esc(p.installed)}</small></div></div>` : '';
+}
+function packItem(m) {
+  const icon = m.icon ? `<img src="${esc(m.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>';
+  const link = `https://modrinth.com/modpack/${encodeURIComponent(m.slug)}`;
+  const btn = m.installed ? '<span class="badge ok">installed</span>'
+    : `<button class="btn small primary" data-pack="${esc(m.id)}" data-title="${esc(m.title)}" ${stopped() ? '' : 'disabled title="Stop the server first"'}>Install</button>`;
+  return `<div class="item">${icon}<div class="txt"><b><a href="${link}" target="_blank" rel="noopener">${esc(m.title)}</a><span class="badge">${m.downloads >= 1e6 ? (m.downloads / 1e6).toFixed(1) + 'M' : Math.max(1, m.downloads / 1000 | 0) + 'k'} downloads</span></b><small>${esc(m.description || '')}</small></div>${btn}</div>`;
+}
+async function searchPacks(q, more) {
+  packQ = q; packOffset = more ? packOffset + 20 : 0;
+  try {
+    const d = await call('modpacks/search?q=' + encodeURIComponent(q) + '&offset=' + packOffset);
+    packTotal = d.total;
+    const html = d.hits.map(packItem).join('');
+    if (more) $('#packResults').insertAdjacentHTML('beforeend', html);
+    else $('#packResults').innerHTML = html || '<div class="empty-state" style="padding:10px 0">No Fabric modpacks found.</div>';
+    $('#packMore').hidden = packOffset + 20 >= packTotal;
+  } catch (err) { $('#packResults').innerHTML = `<div class="empty-state" style="padding:10px 0">${esc(err.message)}</div>`; }
+}
+async function packInstalled(promise) {
+  const p = await promise;
+  const s = await call('state'); config = s.config; fillForm(); loadVersions(config.serverType);
+  toast(`${p.name} is installed (Minecraft ${p.minecraft}). Press Start. Players need the same modpack.`);
+  $('#modsResults').innerHTML = ''; $('#packResults').innerHTML = '';
+  loadMods();
+}
+$('#packSearchForm').addEventListener('submit', e => { e.preventDefault(); searchPacks($('#packQuery').value.trim(), false); });
+$('#packMore').addEventListener('click', () => searchPacks(packQ, true));
+$('#packFile').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  if (!stopped()) return toast('Stop the server first, then install the modpack.', true);
+  if (!confirm(`Install the modpack "${file.name}"?\n\nThe server switches to Fabric and the Minecraft version the pack needs. Your current mods are moved to the Backups folder. Your world stays.`)) return;
+  toast('Installing ' + file.name + '…');
+  try {
+    await packInstalled((async () => {
+      const r = await fetch('/api/modpacks/upload', { method: 'POST', headers: { 'X-EasyHost': '1' }, body: file });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      return data;
+    })());
+  } catch (err) { toast(err.message, true); }
+});
+
 $('#modsUpdate').addEventListener('click', e => busyBtn(e.target, 'Updating…', async () => {
   const d = await call('mods/update', {});
   toast(d.problems.length ? 'Some could not be updated: ' + d.problems.join('; ') : `All ${typeWord()} are up to date.`, d.problems.length > 0);
@@ -915,7 +1117,7 @@ $('#players').addEventListener('click', e => {
   changeList('bans', 'add', b.dataset.ban, prompt('Reason (optional):') || '');
 });
 window.addEventListener('beforeunload', e => {
-  if (status.state === 'running' || status.state === 'starting') { e.preventDefault(); e.returnValue = ''; }
+  if (!updating && (status.state === 'running' || status.state === 'starting')) { e.preventDefault(); e.returnValue = ''; }
 });
 
 // ---------- settings ----------
@@ -977,6 +1179,8 @@ form.addEventListener('submit', async e => {
   loadVersions(config.serverType);
   loadLists();
   call('mods').then(d => { modSlugs = (d.installed || []).map(m => m.slug).filter(Boolean); }).catch(() => {});
+  checkUpdate(false);
+  setInterval(() => checkUpdate(false), 6 * 3600 * 1000);
 })();
 </script>
 </body>
